@@ -1,0 +1,86 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_env: Literal["development", "test", "production"] = Field(
+        "development",
+        validation_alias="APP_ENV",
+    )
+    database_url: str = Field(
+        "postgresql+asyncpg://abachiwave:abachiwave@localhost:5432/abachiwave",
+        validation_alias="DATABASE_URL",
+    )
+    redis_url: str = Field("redis://localhost:6379/0", validation_alias="REDIS_URL")
+    s3_endpoint_url: str = Field("http://localhost:9000", validation_alias="S3_ENDPOINT_URL")
+    s3_access_key_id: str = Field("minioadmin", validation_alias="S3_ACCESS_KEY_ID")
+    s3_secret_access_key: str = Field("minioadmin", validation_alias="S3_SECRET_ACCESS_KEY")
+    s3_bucket: str = Field("abachiwave-dev", validation_alias="S3_BUCKET")
+    readiness_timeout_seconds: float = Field(
+        3.0,
+        gt=0,
+        le=30,
+        validation_alias="READINESS_TIMEOUT_SECONDS",
+    )
+    version_write_max_retries: int = Field(
+        2,
+        ge=0,
+        le=10,
+        validation_alias="VERSION_WRITE_MAX_RETRIES",
+    )
+    task_timeout_seconds: int = Field(
+        120,
+        ge=1,
+        le=3600,
+        validation_alias="TASK_TIMEOUT_SECONDS",
+    )
+    max_project_uploads: int = Field(
+        100,
+        ge=1,
+        le=1000,
+        validation_alias="MAX_PROJECT_UPLOADS",
+    )
+    request_id_header: str = Field("X-Request-ID", validation_alias="REQUEST_ID_HEADER")
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+
+    @field_validator(
+        "database_url",
+        "redis_url",
+        "s3_endpoint_url",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "s3_bucket",
+        "request_id_header",
+    )
+    @classmethod
+    def require_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def reject_default_production_storage_credentials(self) -> "Settings":
+        if self.app_env == "production" and (
+            self.s3_access_key_id == "minioadmin"
+            or self.s3_secret_access_key == "minioadmin"
+        ):
+            raise ValueError(
+                "production requires non-default object storage credentials"
+            )
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

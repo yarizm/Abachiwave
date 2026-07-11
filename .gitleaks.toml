@@ -1,0 +1,18 @@
+title = "Abachiwave secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated dependencies, caches, and test artifacts"
+paths = [
+  '''(^|[\\/])\.git([\\/]|$)''',
+  '''(^|[\\/])\.venv([\\/]|$)''',
+  '''(^|[\\/])\.playwright-cli([\\/]|$)''',
+  '''(^|[\\/])node_modules([\\/]|$)''',
+  '''(^|[\\/])\.next([\\/]|$)''',
+  '''(^|[\\/])playwright-report([\\/]|$)''',
+  '''(^|[\\/])test-results([\\/]|$)''',
+  '''(^|[\\/])output([\\/]|$)''',
+  '''(^|[\\/])tmp([\\/]|$)''',
+]
