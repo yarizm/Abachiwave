@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.models.audio import AudioUpload, AudioUploadKind, AudioUploadStatus
 from abachiwave.models.demo import AudioDemoVersion, GenerationRun, GenerationRunStatus
+from abachiwave.services.delivery import create_export_bundle
 from abachiwave.services.storage import get_object_storage
 
 
@@ -275,6 +276,36 @@ async def test_export_storage_failure_creates_failed_bundle(
     events_response = await client.get(f"/api/v1/projects/{project_id}/events")
     assert events_response.status_code == 200
     assert "export.failed" in {event["event_type"] for event in events_response.json()}
+
+
+@pytest.mark.asyncio
+async def test_export_commit_failure_deletes_stored_archive(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, storage = client_with_storage
+    project_id, song_spec, _lyrics, _chords, _midi_assets = await _create_full_asset_chain(client)
+    arrangement_response = await client.post(
+        f"/api/v1/projects/{project_id}/arrangement/generate",
+        json={"song_spec_id": song_spec["id"]},
+    )
+    assert arrangement_response.status_code == 201
+
+    async with session_factory() as session:
+        async def fail_commit() -> None:
+            raise RuntimeError("database commit failed")
+
+        monkeypatch.setattr(session, "commit", fail_commit)
+        with pytest.raises(RuntimeError, match="database commit failed"):
+            await create_export_bundle(
+                session=session,
+                project_id=UUID(project_id),
+                arrangement_plan_id=UUID(arrangement_response.json()["id"]),
+                storage=storage,
+            )
+
+    assert not any("/exports/" in key for key in storage.objects)
 
 
 @pytest.mark.asyncio

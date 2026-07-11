@@ -161,6 +161,7 @@ async def update_audio_upload(
     upload = await get_audio_upload(session, project_id, audio_upload_id)
     if upload is None:
         return None
+    previous_status = upload.status
     update_fields = payload.model_fields_set
     if "kind" in update_fields and payload.kind is not None:
         upload.kind = payload.kind
@@ -168,6 +169,25 @@ async def update_audio_upload(
         upload.status = payload.status
     if "notes" in update_fields:
         upload.notes = payload.notes
+    if update_fields:
+        event_type = "audio.updated"
+        if "status" in update_fields and upload.status != previous_status:
+            event_type = (
+                "audio.archived"
+                if upload.status == AudioUploadStatus.archived
+                else "audio.restored"
+            )
+        add_project_event(
+            session,
+            project_id=project_id,
+            event_type=event_type,
+            payload={
+                "audio_upload_id": upload.id,
+                "status": str(upload.status),
+                "updated_fields": sorted(update_fields),
+            },
+            artifact_version_id=UUID(upload.id),
+        )
     await session.commit()
     await session.refresh(upload)
     return upload

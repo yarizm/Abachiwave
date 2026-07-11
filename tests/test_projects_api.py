@@ -4,6 +4,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from abachiwave.core.request_context import request_path_context
 from abachiwave.schemas.health import DependencyReadiness
 from abachiwave.services.readiness import get_readiness_service
 
@@ -14,6 +15,23 @@ class StubReadinessService:
 
     async def check(self) -> DependencyReadiness:
         return self._dependencies
+
+
+def test_request_path_context_extracts_business_identifiers() -> None:
+    project_id = "11111111-1111-4111-8111-111111111111"
+    run_id = "22222222-2222-4222-8222-222222222222"
+    export_id = "33333333-3333-4333-8333-333333333333"
+
+    assert request_path_context(f"/api/v1/projects/{project_id}/lyrics") == {
+        "project_id": project_id
+    }
+    assert request_path_context(f"/api/v1/tasks/{run_id}/retry") == {
+        "generation_run_id": run_id
+    }
+    assert request_path_context(f"/api/v1/exports/{export_id}/download") == {
+        "export_id": export_id
+    }
+    assert request_path_context("/health/ready") == {}
 
 
 @pytest.mark.asyncio

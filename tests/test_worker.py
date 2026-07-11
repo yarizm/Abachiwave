@@ -2,10 +2,16 @@ import asyncio
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from abachiwave.models.demo import GenerationRun, GenerationRunStatus
+from abachiwave.models.demo import (
+    GenerationRun,
+    GenerationRunStatus,
+    GenerationRunType,
+)
+from abachiwave.models.project import Project
 from abachiwave.services.generation_runs import TASK_TIMEOUT_ERROR, run_generation_with_timeout
-from abachiwave.worker import build_redis_settings, health_check
+from abachiwave.worker import build_redis_settings, health_check, load_generation_log_context
 
 
 @pytest.mark.asyncio
@@ -21,6 +27,36 @@ def test_build_redis_settings_from_url() -> None:
     assert settings.database == 2
     assert settings.username == "user"
     assert settings.password == "pass"
+
+
+@pytest.mark.asyncio
+async def test_load_generation_log_context_includes_run_and_project(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        project = Project(name="Worker context")
+        session.add(project)
+        await session.flush()
+        run = GenerationRun(
+            project_id=project.id,
+            run_type=GenerationRunType.demo_generation,
+            status=GenerationRunStatus.queued,
+            input_manifest={},
+            provider_name="test_provider",
+            provider_version="1.0",
+            provider_params={},
+        )
+        session.add(run)
+        await session.commit()
+        run_id = UUID(run.id)
+
+    context = await load_generation_log_context(run_id, session_factory=session_factory)
+
+    assert context == {
+        "generation_run_id": str(run_id),
+        "project_id": project.id,
+        "generation_run_type": "demo_generation",
+    }
 
 
 @pytest.mark.asyncio

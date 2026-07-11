@@ -9,6 +9,10 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_UUID_SEGMENT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+_PROJECT_PATH_PATTERN = re.compile(rf"^/api/v1/projects/(?P<project_id>{_UUID_SEGMENT})(?:/|$)")
+_TASK_PATH_PATTERN = re.compile(rf"^/api/v1/tasks/(?P<generation_run_id>{_UUID_SEGMENT})(?:/|$)")
+_EXPORT_PATH_PATTERN = re.compile(rf"^/api/v1/exports/(?P<export_id>{_UUID_SEGMENT})(?:/|$)")
 RequestHandler = Callable[[Request], Awaitable[Response]]
 
 
@@ -16,6 +20,15 @@ def normalize_request_id(value: str | None) -> str:
     if value and _REQUEST_ID_PATTERN.fullmatch(value):
         return value
     return str(uuid4())
+
+
+def request_path_context(path: str) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for pattern in (_PROJECT_PATH_PATTERN, _TASK_PATH_PATTERN, _EXPORT_PATH_PATTERN):
+        match = pattern.match(path)
+        if match:
+            context.update({key: value for key, value in match.groupdict().items() if value})
+    return context
 
 
 async def request_context_middleware(
@@ -30,6 +43,7 @@ async def request_context_middleware(
         request_id=request_id,
         http_method=request.method,
         http_path=request.url.path,
+        **request_path_context(request.url.path),
     )
     logger = structlog.get_logger("abachiwave.request")
 

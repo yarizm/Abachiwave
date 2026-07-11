@@ -1,6 +1,7 @@
 import hmac
 import json
 from collections.abc import Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -346,9 +347,11 @@ async def create_export_bundle(
         export_id=export_id,
         assets=export_assets,
     )
+    stored_key: str | None = None
     try:
         archive = _build_export_zip(project, export_assets, manifest, storage)
         storage.put_bytes(storage_key, archive, EXPORT_CONTENT_TYPE)
+        stored_key = storage_key
         bundle = ExportBundle(
             id=export_id,
             project_id=str(project_id),
@@ -372,24 +375,31 @@ async def create_export_bundle(
             content_type=EXPORT_CONTENT_TYPE,
             error_message=str(exc),
         )
-    session.add(bundle)
-    add_project_event(
-        session,
-        project_id=project_id,
-        event_type=(
-            "export.ready" if bundle.status == ExportBundleStatus.ready else "export.failed"
-        ),
-        payload={
-            "export_id": bundle.id,
-            "status": str(bundle.status),
-            "filename": bundle.filename,
-            "error_message": bundle.error_message,
-        },
-        artifact_version_id=UUID(bundle.id),
-    )
-    await session.commit()
-    await session.refresh(bundle)
-    return bundle, [], None
+    try:
+        session.add(bundle)
+        add_project_event(
+            session,
+            project_id=project_id,
+            event_type=(
+                "export.ready" if bundle.status == ExportBundleStatus.ready else "export.failed"
+            ),
+            payload={
+                "export_id": bundle.id,
+                "status": str(bundle.status),
+                "filename": bundle.filename,
+                "error_message": bundle.error_message,
+            },
+            artifact_version_id=UUID(bundle.id),
+        )
+        await session.commit()
+        await session.refresh(bundle)
+        return bundle, [], None
+    except Exception:
+        await session.rollback()
+        if stored_key is not None:
+            with suppress(Exception):
+                storage.delete_bytes(stored_key)
+        raise
 
 
 async def resolve_export_assets(

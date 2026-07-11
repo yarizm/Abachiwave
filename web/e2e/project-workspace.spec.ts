@@ -77,7 +77,7 @@ test.describe("project workspace", () => {
 
     await page.getByRole("textbox", { name: "Song idea" }).fill(completeIdea);
     await page.getByRole("button", { name: "Save intake" }).click();
-    await expect(page.getByText("Idea intake request failed with 503")).toBeVisible();
+    await expect(page.getByText("Idea intake request failed with 503", { exact: false })).toBeVisible();
 
     await runApiAction(
       page,

@@ -170,6 +170,17 @@ async def test_audio_upload_metadata_update_and_download(
     assert clear_notes_response.json()["status"] == "archived"
     assert clear_notes_response.json()["notes"] is None
 
+    restore_response = await client.patch(
+        f"/api/v1/projects/{project_id}/audio-uploads/{upload['id']}",
+        json={"status": "available"},
+    )
+    assert restore_response.status_code == 200
+
+    events_response = await client.get(f"/api/v1/projects/{project_id}/events")
+    assert events_response.status_code == 200
+    event_types = {event["event_type"] for event in events_response.json()}
+    assert {"audio.updated", "audio.archived", "audio.restored"}.issubset(event_types)
+
     download_response = await client.get(
         f"/api/v1/projects/{project_id}/audio-uploads/{upload['id']}/download"
     )

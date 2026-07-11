@@ -3,7 +3,7 @@
 import { Download } from "lucide-react";
 import { useState } from "react";
 
-import { ensureOk } from "@/lib/api-client";
+import { fetchBlob } from "@/lib/api-client";
 
 type DownloadButtonProps = {
   filename: string;
@@ -18,9 +18,7 @@ export function DownloadButton({ filename, url }: DownloadButtonProps) {
     setIsDownloading(true);
     setError(null);
     try {
-      const response = await fetch(url);
-      ensureOk(response, "Download");
-      const objectUrl = URL.createObjectURL(await response.blob());
+      const objectUrl = URL.createObjectURL(await fetchBlob(url, "Download"));
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
       anchor.download = filename;

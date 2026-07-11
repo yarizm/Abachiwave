@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ArrangementPlanVersion,
@@ -17,6 +17,7 @@ import {
   ProjectHandoff,
   ProjectReview,
   RevisionRequest,
+  isRunActive,
 } from "@/lib/composition";
 import { Project } from "@/lib/projects";
 import { IdeaIntake, SongSpecVersion } from "@/lib/song-specs";
@@ -71,6 +72,20 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setIsLoading(false);
     }
   }, [apiBaseUrl, projectId]);
+
+  useEffect(() => {
+    void loadWorkspace();
+  }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (!generationRuns.some(isRunActive)) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      void loadWorkspace();
+    }, 2500);
+    return () => window.clearInterval(intervalId);
+  }, [generationRuns, loadWorkspace]);
 
   return {
     project,
