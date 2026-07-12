@@ -20,7 +20,7 @@ Abachiwave 是一个面向音乐创作者的 AI 协作创作工作台，用来�
 
 ## 当前状态
 
-已完成 Milestone 0-6 的本地 MVP 能力，以及 Milestone 7 的工程稳定化、真实依赖 CI、浏览器验收、安全扫描和运行文档。当前唯一外部限制是：私有仓库的 `main` 分支保护需要 GitHub Pro 或将仓库公开，详见 [Issue #8](https://github.com/yarizm/Abachiwave/issues/8)。
+已完成 Milestone 0-6 的本地 MVP 能力，以及 Milestone 7 的工程稳定化、真实依赖 CI、浏览器验收、安全扫描和运行文档。公开仓库的 `main` 分支已启用保护，合并前必须通过 Backend、Frontend、Security、Integration 和 Browser 五项检查。
 
 - FastAPI API、Pydantic v2、SQLAlchemy 2.x、Alembic。
 - PostgreSQL、Redis、MinIO、Arq worker 的 Docker Compose 本地环境。
