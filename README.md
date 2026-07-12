@@ -25,6 +25,7 @@ Abachiwave 是一个面向音乐创作者的 AI 协作创作工作台，用来�
 - FastAPI API、Pydantic v2、SQLAlchemy 2.x、Alembic。
 - PostgreSQL、Redis、MinIO、Arq worker 的 Docker Compose 本地环境。
 - Next.js + TypeScript 前端工作台。
+- 可持久化的 English/中文 UI 语言设置，中文模式覆盖导航、表单、状态、错误、空状态和系统生成说明，保留 SongSpec、MIDI、Demo 等专有名词。
 - Idea Intake、澄清问题、SongSpec 草稿、编辑、确认和版本化。
 - 歌词、和弦、chord/melody/hook MIDI 生成、编辑和下载。
 - 编曲方案、资产树、版本时间线、Demo/上传音频、含 handoff/评论/评审/事件的 ZIP 导出和下载令牌。

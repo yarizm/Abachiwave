@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { cookies } from "next/headers";
+
+import { AppShell } from "@/components/app-shell";
+import { LocaleProvider } from "@/i18n/locale-provider";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale } from "@/i18n/translations";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,27 +11,19 @@ export const metadata: Metadata = {
   description: "AI-assisted music creation workspace",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestedLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const locale = isLocale(requestedLocale) ? requestedLocale : DEFAULT_LOCALE;
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>
-        <div className="shell">
-          <header className="topbar">
-            <Link className="brand" href="/">
-              <strong>Abachiwave</strong>
-              <span>Music creation workspace</span>
-            </Link>
-            <nav className="nav" aria-label="Primary">
-              <Link href="/">Login</Link>
-              <Link href="/projects">Projects</Link>
-            </nav>
-          </header>
-          <main className="main">{children}</main>
-        </div>
+        <LocaleProvider initialLocale={locale}>
+          <AppShell>{children}</AppShell>
+        </LocaleProvider>
       </body>
     </html>
   );

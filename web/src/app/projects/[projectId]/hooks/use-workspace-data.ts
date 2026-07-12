@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useLocale } from "@/i18n/locale-provider";
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
@@ -24,6 +25,7 @@ import { IdeaIntake, SongSpecVersion } from "@/lib/song-specs";
 import { loadWorkspaceSnapshot } from "@/lib/workspace-api";
 
 export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
+  const { errorMessage } = useLocale();
   const [project, setProject] = useState<Project | null>(null);
   const [latestIntake, setLatestIntake] = useState<IdeaIntake | null>(null);
   const [versions, setVersions] = useState<SongSpecVersion[]>([]);
@@ -67,11 +69,11 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setProjectReview(snapshot.projectReview);
       setAudioUploads(snapshot.audioUploads);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load workspace");
+      setError(errorMessage(loadError, "Failed to load workspace"));
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, projectId]);
+  }, [apiBaseUrl, errorMessage, projectId]);
 
   useEffect(() => {
     void loadWorkspace();

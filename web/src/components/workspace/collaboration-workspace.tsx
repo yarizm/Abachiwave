@@ -4,6 +4,8 @@ import { Check, MessageSquare } from "lucide-react";
 import { FormEvent } from "react";
 
 import { ActivityPanel } from "@/components/workspace/project-summary-panels";
+import { useLocale } from "@/i18n/locale-provider";
+import { DEFAULT_LOCALE, Locale, translate, translateText } from "@/i18n/translations";
 import {
   AssetReference,
   AssetTree,
@@ -84,35 +86,35 @@ export function buildCommentTargets({
   exports: ExportBundle[];
   uploads: AudioUpload[];
   revisions: RevisionRequest[];
-}): CommentTargetOption[] {
+}, locale: Locale = DEFAULT_LOCALE): CommentTargetOption[] {
   const options: CommentTargetOption[] = [
     {
       value: makeCommentTargetValue("project", null),
-      label: "Project",
+      label: translate(locale, "Project"),
       target_type: "project",
       target_id: null,
     },
   ];
   const current = assetTree?.current;
   if (current?.song_spec) {
-    options.push(commentTargetFromAsset("song_spec", current.song_spec));
+    options.push(commentTargetFromAsset("song_spec", current.song_spec, locale));
   }
   if (current?.lyrics) {
-    options.push(commentTargetFromAsset("lyrics", current.lyrics));
+    options.push(commentTargetFromAsset("lyrics", current.lyrics, locale));
   }
   if (current?.chords) {
-    options.push(commentTargetFromAsset("chords", current.chords));
+    options.push(commentTargetFromAsset("chords", current.chords, locale));
   }
   current?.midi_assets.forEach((asset) => {
-    options.push(commentTargetFromAsset("midi", asset));
+    options.push(commentTargetFromAsset("midi", asset, locale));
   });
   if (current?.arrangement) {
-    options.push(commentTargetFromAsset("arrangement", current.arrangement));
+    options.push(commentTargetFromAsset("arrangement", current.arrangement, locale));
   }
   if (demos[0]) {
     options.push({
       value: makeCommentTargetValue("demo", demos[0].id),
-      label: `Demo v${demos[0].version_number}`,
+      label: translate(locale, "Demo v{version}", { version: demos[0].version_number }),
       target_type: "demo",
       target_id: demos[0].id,
     });
@@ -120,7 +122,7 @@ export function buildCommentTargets({
   if (uploads[0]) {
     options.push({
       value: makeCommentTargetValue("audio_upload", uploads[0].id),
-      label: `Audio: ${uploads[0].filename}`,
+      label: translate(locale, "Audio: {filename}", { filename: uploads[0].filename }),
       target_type: "audio_upload",
       target_id: uploads[0].id,
     });
@@ -128,7 +130,9 @@ export function buildCommentTargets({
   if (exports[0]) {
     options.push({
       value: makeCommentTargetValue("export", exports[0].id),
-      label: `Export: ${exports[0].status}`,
+      label: translate(locale, "Export: {status}", {
+        status: translateText(locale, exports[0].status),
+      }),
       target_type: "export",
       target_id: exports[0].id,
     });
@@ -136,7 +140,9 @@ export function buildCommentTargets({
   if (revisions[0]) {
     options.push({
       value: makeCommentTargetValue("revision", revisions[0].id),
-      label: `Revision: ${revisions[0].status}`,
+      label: translate(locale, "Revision: {status}", {
+        status: translateText(locale, revisions[0].status),
+      }),
       target_type: "revision",
       target_id: revisions[0].id,
     });
@@ -174,20 +180,21 @@ function CommentsPanel({
   targetOptions,
   targetValue,
 }: Omit<CollaborationWorkspaceProps, "events">) {
+  const { dateTime, t, text } = useLocale();
   const openCount = comments.filter((comment) => comment.status === "open").length;
   return (
     <section className="panel comments-panel" aria-labelledby="comments-title">
       <div className="section-heading">
         <h2 className="heading-with-icon" id="comments-title">
           <MessageSquare aria-hidden="true" size={20} />
-          Comments
+          {t("Comments")}
         </h2>
-        <span className="badge">{openCount} open</span>
+        <span className="badge">{t("{count} open", { count: openCount })}</span>
       </div>
       <form className="form comment-form" onSubmit={onSubmit}>
         <div className="form-row">
           <div className="field">
-            <label htmlFor="comment-author">Author</label>
+            <label htmlFor="comment-author">{t("Author")}</label>
             <input
               id="comment-author"
               onChange={(event) => onAuthorChange(event.target.value)}
@@ -195,7 +202,7 @@ function CommentsPanel({
             />
           </div>
           <div className="field">
-            <label htmlFor="comment-target">Target</label>
+            <label htmlFor="comment-target">{t("Target")}</label>
             <select
               id="comment-target"
               onChange={(event) => onTargetChange(event.target.value)}
@@ -210,17 +217,17 @@ function CommentsPanel({
           </div>
         </div>
         <div className="field">
-          <label htmlFor="comment-body">Comment</label>
+          <label htmlFor="comment-body">{t("Comment")}</label>
           <textarea
             id="comment-body"
             onChange={(event) => onBodyChange(event.target.value)}
-            placeholder="Leave feedback, handoff notes, or a decision to revisit later..."
+            placeholder={t("Leave feedback, handoff notes, or a decision to revisit later...")}
             value={body}
           />
         </div>
         <button className="button" disabled={isSaving} type="submit">
           <MessageSquare aria-hidden="true" size={18} />
-          Add comment
+          {t("Add comment")}
         </button>
       </form>
       {comments.length ? (
@@ -230,12 +237,11 @@ function CommentsPanel({
               <div>
                 <div className="section-heading">
                   <strong>{comment.author_name}</strong>
-                  <span className={`badge comment-${comment.status}`}>{comment.status}</span>
+                  <span className={`badge comment-${comment.status}`}>{text(comment.status)}</span>
                 </div>
                 <p>{comment.body}</p>
                 <p className="meta">
-                  {formatCommentTarget(comment, targetOptions)} -{" "}
-                  {new Date(comment.created_at).toLocaleString()}
+                  {formatCommentTarget(comment, targetOptions, text)} - {dateTime(comment.created_at)}
                 </p>
               </div>
               <button
@@ -247,13 +253,13 @@ function CommentsPanel({
                 type="button"
               >
                 <Check aria-hidden="true" size={18} />
-                {comment.status === "open" ? "Resolve" : "Reopen"}
+                {comment.status === "open" ? t("Resolve") : t("Reopen")}
               </button>
             </div>
           ))}
         </div>
       ) : (
-        <p className="empty">Comments and handoff notes will appear here.</p>
+        <p className="empty">{t("Comments and handoff notes will appear here.")}</p>
       )}
     </section>
   );
@@ -262,10 +268,12 @@ function CommentsPanel({
 function commentTargetFromAsset(
   targetType: ProjectCommentTargetType,
   asset: AssetReference,
+  locale: Locale,
 ): CommentTargetOption {
+  const label = translateText(locale, asset.label);
   return {
     value: makeCommentTargetValue(targetType, asset.id),
-    label: asset.kind ? `${asset.label} (${asset.kind})` : asset.label,
+    label: asset.kind ? `${label} (${translateText(locale, asset.kind)})` : label,
     target_type: targetType,
     target_id: asset.id,
   };
@@ -274,13 +282,21 @@ function commentTargetFromAsset(
 function formatCommentTarget(
   comment: ProjectComment,
   targetOptions: CommentTargetOption[],
+  text: (value: string) => string,
 ): string {
   const value = makeCommentTargetValue(comment.target_type, comment.target_id);
   const option = targetOptions.find((item) => item.value === value);
-  return option?.label ?? formatCommentTargetType(comment.target_type);
+  return option?.label ?? formatCommentTargetType(comment.target_type, text);
 }
 
-function formatCommentTargetType(targetType: ProjectCommentTargetType): string {
+function formatCommentTargetType(
+  targetType: ProjectCommentTargetType,
+  text: (value: string) => string,
+): string {
+  const translated = text(targetType);
+  if (translated !== targetType) {
+    return translated;
+  }
   return targetType
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))

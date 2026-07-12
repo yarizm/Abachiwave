@@ -28,6 +28,7 @@ import {
   SongSpecVersionsPanel,
   SongSpecWorkspace,
 } from "@/components/workspace/song-spec-workspace";
+import { useLocale } from "@/i18n/locale-provider";
 import { fetchJson } from "@/lib/api-client";
 
 import {
@@ -118,6 +119,7 @@ const apiBaseUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 export default function ProjectWorkspaceClient() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
+  const { errorMessage, locale, t, text } = useLocale();
   const {
     project,
     setProject,
@@ -160,7 +162,7 @@ export default function ProjectWorkspaceClient() {
   const [arrangementDraft, setArrangementDraft] = useState<ArrangementPlan>(() => emptyArrangementPlan());
   const [revisionFeedback, setRevisionFeedback] = useState("");
   const [commentBody, setCommentBody] = useState("");
-  const [commentAuthor, setCommentAuthor] = useState("Local collaborator");
+  const [commentAuthor, setCommentAuthor] = useState(() => t("Local collaborator"));
   const [commentTargetValue, setCommentTargetValue] = useState(
     makeCommentTargetValue("project", null),
   );
@@ -218,9 +220,17 @@ export default function ProjectWorkspaceClient() {
         exports: sortedExports,
         uploads: sortedAudioUploads,
         revisions: sortedRevisions,
-      }),
-    [assetTree, sortedDemos, sortedExports, sortedAudioUploads, sortedRevisions],
+      }, locale),
+    [assetTree, locale, sortedDemos, sortedExports, sortedAudioUploads, sortedRevisions],
   );
+
+  useEffect(() => {
+    setCommentAuthor((current) =>
+      current === "Local collaborator" || current === "本地协作者"
+        ? t("Local collaborator")
+        : current,
+    );
+  }, [t]);
 
   useEffect(() => {
     setIdea(latestIntake?.idea ?? "");
@@ -253,7 +263,7 @@ export default function ProjectWorkspaceClient() {
     event.preventDefault();
     const validationError = validateIdea(idea);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -268,7 +278,7 @@ export default function ProjectWorkspaceClient() {
       setAnswers(intake.answers);
       await loadWorkspace();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to save intake");
+      setError(errorMessage(submitError, "Failed to save intake"));
     } finally {
       setIsSaving(false);
     }
@@ -276,7 +286,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleGenerateDraft() {
     if (!latestIntake) {
-      setError("Create an idea intake before generating a SongSpec.");
+      setError(t("Create an idea intake before generating a SongSpec."));
       return;
     }
     setIsSaving(true);
@@ -294,9 +304,7 @@ export default function ProjectWorkspaceClient() {
       setVersions((current) => sortSongSpecVersions([generated, ...current]));
       await loadWorkspace();
     } catch (generateError) {
-      setError(
-        generateError instanceof Error ? generateError.message : "Failed to generate SongSpec",
-      );
+      setError(errorMessage(generateError, "Failed to generate SongSpec"));
     } finally {
       setIsSaving(false);
     }
@@ -309,7 +317,7 @@ export default function ProjectWorkspaceClient() {
     }
     const payload = parseDraftForm(draftForm);
     if (payload instanceof Error) {
-      setError(payload.message);
+      setError(text(payload.message));
       return;
     }
     setIsSaving(true);
@@ -327,7 +335,7 @@ export default function ProjectWorkspaceClient() {
       setVersions((current) => sortSongSpecVersions([edited, ...current]));
       await loadWorkspace();
     } catch (editError) {
-      setError(editError instanceof Error ? editError.message : "Failed to edit SongSpec");
+      setError(errorMessage(editError, "Failed to edit SongSpec"));
     } finally {
       setIsSaving(false);
     }
@@ -347,7 +355,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (approveError) {
-      setError(approveError instanceof Error ? approveError.message : "Failed to approve SongSpec");
+      setError(errorMessage(approveError, "Failed to approve SongSpec"));
     } finally {
       setIsSaving(false);
     }
@@ -355,7 +363,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleGenerateLyrics() {
     if (!approvedVersion) {
-      setError("Approve a SongSpec before generating lyrics.");
+      setError(t("Approve a SongSpec before generating lyrics."));
       return;
     }
     setIsSaving(true);
@@ -373,7 +381,7 @@ export default function ProjectWorkspaceClient() {
       setLyricsVersions((current) => sortLyricsVersions([generated, ...current]));
       await loadWorkspace();
     } catch (lyricsError) {
-      setError(lyricsError instanceof Error ? lyricsError.message : "Failed to generate lyrics");
+      setError(errorMessage(lyricsError, "Failed to generate lyrics"));
     } finally {
       setIsSaving(false);
     }
@@ -386,7 +394,7 @@ export default function ProjectWorkspaceClient() {
     }
     const validationError = validateLyricSections(lyricDraft);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -407,7 +415,7 @@ export default function ProjectWorkspaceClient() {
       setLyricsVersions((current) => sortLyricsVersions([edited, ...current]));
       await loadWorkspace();
     } catch (lyricsError) {
-      setError(lyricsError instanceof Error ? lyricsError.message : "Failed to edit lyrics");
+      setError(errorMessage(lyricsError, "Failed to edit lyrics"));
     } finally {
       setIsSaving(false);
     }
@@ -415,7 +423,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleGenerateChords() {
     if (!approvedVersion) {
-      setError("Approve a SongSpec before generating chords.");
+      setError(t("Approve a SongSpec before generating chords."));
       return;
     }
     setIsSaving(true);
@@ -436,7 +444,7 @@ export default function ProjectWorkspaceClient() {
       setChordVersions((current) => sortChordVersions([generated, ...current]));
       await loadWorkspace();
     } catch (chordsError) {
-      setError(chordsError instanceof Error ? chordsError.message : "Failed to generate chords");
+      setError(errorMessage(chordsError, "Failed to generate chords"));
     } finally {
       setIsSaving(false);
     }
@@ -449,7 +457,7 @@ export default function ProjectWorkspaceClient() {
     }
     const validationError = validateChordSections(chordDraft);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -467,7 +475,7 @@ export default function ProjectWorkspaceClient() {
       setChordVersions((current) => sortChordVersions([edited, ...current]));
       await loadWorkspace();
     } catch (chordsError) {
-      setError(chordsError instanceof Error ? chordsError.message : "Failed to edit chords");
+      setError(errorMessage(chordsError, "Failed to edit chords"));
     } finally {
       setIsSaving(false);
     }
@@ -475,7 +483,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleGenerateMidi() {
     if (!approvedVersion) {
-      setError("Approve a SongSpec before generating MIDI.");
+      setError(t("Approve a SongSpec before generating MIDI."));
       return;
     }
     setIsSaving(true);
@@ -497,7 +505,7 @@ export default function ProjectWorkspaceClient() {
       setMidiAssets((current) => sortMidiAssets([...generated, ...current]));
       await loadWorkspace();
     } catch (midiError) {
-      setError(midiError instanceof Error ? midiError.message : "Failed to generate MIDI");
+      setError(errorMessage(midiError, "Failed to generate MIDI"));
     } finally {
       setIsSaving(false);
     }
@@ -507,7 +515,7 @@ export default function ProjectWorkspaceClient() {
     event.preventDefault();
     const validationError = validateAudioUploadFile(audioUploadFile);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     if (!audioUploadFile) {
@@ -531,7 +539,7 @@ export default function ProjectWorkspaceClient() {
       setAudioUploadNotes("");
       await loadWorkspace();
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload audio");
+      setError(errorMessage(uploadError, "Failed to upload audio"));
     } finally {
       setIsSaving(false);
     }
@@ -544,7 +552,7 @@ export default function ProjectWorkspaceClient() {
     if (payload.notes !== undefined) {
       const notesError = validateAudioUploadNotes(payload.notes ?? "");
       if (notesError) {
-        setError(notesError);
+        setError(text(notesError));
         return;
       }
     }
@@ -568,7 +576,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to update audio");
+      setError(errorMessage(updateError, "Failed to update audio"));
     } finally {
       setIsSaving(false);
     }
@@ -576,7 +584,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleExtractAudioMidi(audioUploadId: string) {
     if (!approvedVersion) {
-      setError("Approve a SongSpec before extracting melody MIDI.");
+      setError(t("Approve a SongSpec before extracting melody MIDI."));
       return;
     }
     setIsSaving(true);
@@ -594,9 +602,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (extractError) {
-      setError(
-        extractError instanceof Error ? extractError.message : "Failed to extract melody MIDI",
-      );
+      setError(errorMessage(extractError, "Failed to extract melody MIDI"));
     } finally {
       setIsSaving(false);
     }
@@ -604,7 +610,7 @@ export default function ProjectWorkspaceClient() {
 
   async function handleGenerateArrangement() {
     if (!approvedVersion) {
-      setError("Approve a SongSpec before generating an arrangement.");
+      setError(t("Approve a SongSpec before generating an arrangement."));
       return;
     }
     setIsSaving(true);
@@ -621,11 +627,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (arrangementError) {
-      setError(
-        arrangementError instanceof Error
-          ? arrangementError.message
-          : "Failed to generate arrangement",
-      );
+      setError(errorMessage(arrangementError, "Failed to generate arrangement"));
     } finally {
       setIsSaving(false);
     }
@@ -638,7 +640,7 @@ export default function ProjectWorkspaceClient() {
     }
     const validationError = validateArrangementPlan(arrangementDraft);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -655,9 +657,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (arrangementError) {
-      setError(
-        arrangementError instanceof Error ? arrangementError.message : "Failed to edit arrangement",
-      );
+      setError(errorMessage(arrangementError, "Failed to edit arrangement"));
     } finally {
       setIsSaving(false);
     }
@@ -674,7 +674,7 @@ export default function ProjectWorkspaceClient() {
       });
       await loadWorkspace();
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : "Failed to export project");
+      setError(errorMessage(exportError, "Failed to export project"));
     } finally {
       setIsSaving(false);
     }
@@ -696,7 +696,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (demoError) {
-      setError(demoError instanceof Error ? demoError.message : "Failed to generate demo");
+      setError(errorMessage(demoError, "Failed to generate demo"));
     } finally {
       setIsSaving(false);
     }
@@ -714,7 +714,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "Failed to retry demo");
+      setError(errorMessage(retryError, "Failed to retry demo"));
     } finally {
       setIsSaving(false);
     }
@@ -734,7 +734,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (cancelError) {
-      setError(cancelError instanceof Error ? cancelError.message : "Failed to cancel demo");
+      setError(errorMessage(cancelError, "Failed to cancel task"));
     } finally {
       setIsSaving(false);
     }
@@ -744,7 +744,7 @@ export default function ProjectWorkspaceClient() {
     event.preventDefault();
     const validationError = validateRevisionFeedback(revisionFeedback);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -763,9 +763,7 @@ export default function ProjectWorkspaceClient() {
       setRevisionFeedback("");
       await loadWorkspace();
     } catch (revisionError) {
-      setError(
-        revisionError instanceof Error ? revisionError.message : "Failed to plan revision",
-      );
+      setError(errorMessage(revisionError, "Failed to plan revision"));
     } finally {
       setIsSaving(false);
     }
@@ -789,7 +787,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (applyError) {
-      setError(applyError instanceof Error ? applyError.message : "Failed to apply revision");
+      setError(errorMessage(applyError, "Failed to apply revision"));
     } finally {
       setIsSaving(false);
     }
@@ -809,7 +807,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (rejectError) {
-      setError(rejectError instanceof Error ? rejectError.message : "Failed to reject revision");
+      setError(errorMessage(rejectError, "Failed to reject revision"));
     } finally {
       setIsSaving(false);
     }
@@ -819,7 +817,7 @@ export default function ProjectWorkspaceClient() {
     event.preventDefault();
     const validationError = validateCommentBody(commentBody);
     if (validationError) {
-      setError(validationError);
+      setError(text(validationError));
       return;
     }
     setIsSaving(true);
@@ -834,7 +832,7 @@ export default function ProjectWorkspaceClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             body: commentBody,
-            author_name: commentAuthor.trim() || "Local collaborator",
+            author_name: commentAuthor.trim() || t("Local collaborator"),
             target_type: target.target_type,
             target_id: target.target_id,
           }),
@@ -844,7 +842,7 @@ export default function ProjectWorkspaceClient() {
       setCommentBody("");
       await loadWorkspace();
     } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : "Failed to create comment");
+      setError(errorMessage(commentError, "Failed to create comment"));
     } finally {
       setIsSaving(false);
     }
@@ -868,7 +866,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : "Failed to update comment");
+      setError(errorMessage(commentError, "Failed to update comment"));
     } finally {
       setIsSaving(false);
     }
@@ -888,7 +886,7 @@ export default function ProjectWorkspaceClient() {
       );
       setVersionDiff(diff);
     } catch (diffError) {
-      setError(diffError instanceof Error ? diffError.message : "Failed to compare versions");
+      setError(errorMessage(diffError, "Failed to compare versions"));
     } finally {
       setIsSaving(false);
     }
@@ -905,7 +903,7 @@ export default function ProjectWorkspaceClient() {
       });
       await loadWorkspace();
     } catch (restoreError) {
-      setError(restoreError instanceof Error ? restoreError.message : "Failed to restore version");
+      setError(errorMessage(restoreError, "Failed to restore version"));
     } finally {
       setIsSaving(false);
     }
@@ -915,12 +913,12 @@ export default function ProjectWorkspaceClient() {
     event.preventDefault();
     const nameError = validateProjectName(projectNameDraft);
     if (nameError) {
-      setError(nameError);
+      setError(text(nameError));
       return;
     }
     const descriptionError = validateProjectDescription(projectDescriptionDraft);
     if (descriptionError) {
-      setError(descriptionError);
+      setError(text(descriptionError));
       return;
     }
 
@@ -941,7 +939,7 @@ export default function ProjectWorkspaceClient() {
       );
       setProject(updatedProject);
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to update project");
+      setError(errorMessage(updateError, "Failed to update project"));
     } finally {
       setIsSaving(false);
     }
@@ -966,9 +964,7 @@ export default function ProjectWorkspaceClient() {
       );
       setProject(updatedProject);
     } catch (statusError) {
-      setError(
-        statusError instanceof Error ? statusError.message : "Failed to update project status",
-      );
+      setError(errorMessage(statusError, "Failed to update project status"));
     } finally {
       setIsSaving(false);
     }

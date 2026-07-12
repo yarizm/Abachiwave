@@ -67,6 +67,35 @@ textarea {
   gap: 12px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-setting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 5px 7px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.language-setting select {
+  min-width: 86px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  outline: none;
+}
+
 .nav a {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -860,6 +889,11 @@ textarea {
     align-items: flex-start;
     flex-direction: column;
     padding: 16px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
   }
 
   .grid {

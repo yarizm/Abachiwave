@@ -25,6 +25,7 @@ Milestones 0-6 are implemented for local MVP use, and Milestone 7 engineering st
 - FastAPI API, Pydantic v2, SQLAlchemy 2.x, and Alembic.
 - Docker Compose stack with PostgreSQL, Redis, MinIO, API, worker, and web.
 - Next.js + TypeScript frontend workspace.
+- Persistent English/Chinese UI language setting covering navigation, forms, statuses, errors, empty states, and system-generated guidance while preserving product terms such as SongSpec, MIDI, and Demo.
 - Idea Intake, clarification questions, SongSpec drafting, editing, approval, and versioning.
 - Lyrics, chords, chord/melody/hook MIDI generation, editing, and download.
 - Arrangement plans, asset tree, version timeline, Demo/uploaded audio, ZIP export with handoff/comments/review/events, and download tokens.

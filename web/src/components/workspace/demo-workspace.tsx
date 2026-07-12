@@ -5,6 +5,7 @@ import { Music2, RefreshCw, XCircle } from "lucide-react";
 import { DownloadButton } from "@/components/workspace/download-button";
 import { Waveform } from "@/components/workspace/waveform";
 import { formatBytes, formatPrerequisite } from "@/components/workspace/workspace-format";
+import { useLocale } from "@/i18n/locale-provider";
 import {
   AssetTree,
   AudioDemoVersion,
@@ -41,12 +42,13 @@ export function DemoWorkspace({
   projectId,
   runs,
 }: DemoWorkspaceProps) {
+  const { dateTime, locale, t, text } = useLocale();
   const missing = assetTree?.missing_prerequisites ?? [];
   const activeRuns = runs.filter(isRunActive);
   return (
     <section className="panel demo-panel" aria-labelledby="demo-title">
       <div className="section-heading">
-        <h2 id="demo-title">Demo</h2>
+        <h2 id="demo-title">{t("Demo")}</h2>
         <span className="badge">{demos.length}</span>
       </div>
       <button
@@ -56,13 +58,15 @@ export function DemoWorkspace({
         type="button"
       >
         <Music2 aria-hidden="true" size={18} />
-        Generate WAV demo
+        {t("Generate WAV demo")}
       </button>
       {activeRuns.length ? (
-        <p className="empty">Demo generation is running. Status refreshes automatically.</p>
+        <p className="empty">{t("Demo generation is running. Status refreshes automatically.")}</p>
       ) : null}
       {missing.length ? (
-        <p className="empty">Missing: {missing.map(formatPrerequisite).join(", ")}</p>
+        <p className="empty">
+          {t("Missing: {items}", { items: missing.map((item) => text(formatPrerequisite(item))).join(", ") })}
+        </p>
       ) : null}
       {runs.length ? (
         <div className="run-list">
@@ -71,9 +75,15 @@ export function DemoWorkspace({
               <div>
                 <strong>{run.provider_name}</strong>
                 <p className="meta">
-                  {run.status} - {new Date(run.created_at).toLocaleString()}
+                  {text(run.status)} - {dateTime(run.created_at)}
                 </p>
-                {run.error_message ? <p className="error">{run.error_message}</p> : null}
+                {run.error_message ? (
+                  <p className="error">
+                    {locale === "zh-CN" && text(run.error_message) === run.error_message
+                      ? t("Task failed")
+                      : text(run.error_message)}
+                  </p>
+                ) : null}
               </div>
               {canCancelRun(run) ? (
                 <button
@@ -83,7 +93,7 @@ export function DemoWorkspace({
                   type="button"
                 >
                   <XCircle aria-hidden="true" size={18} />
-                  Cancel
+                  {t("Cancel")}
                 </button>
               ) : canRetryRun(run) ? (
                 <button
@@ -93,20 +103,20 @@ export function DemoWorkspace({
                   type="button"
                 >
                   <RefreshCw aria-hidden="true" size={18} />
-                  Retry
+                  {t("Retry")}
                 </button>
               ) : (
-                <span className="badge">{run.demo_id ? "demo ready" : run.status}</span>
+                <span className="badge">{text(run.demo_id ? "demo ready" : run.status)}</span>
               )}
             </div>
           ))}
         </div>
       ) : null}
       {demos.length >= 2 ? (
-        <div className="compare-grid" aria-label="Demo comparison">
+        <div className="compare-grid" aria-label={t("Demo comparison")}>
           {demos.slice(0, 2).map((demo) => (
             <div className="compare-card" key={`compare-${demo.id}`}>
-              <strong>Demo v{demo.version_number}</strong>
+              <strong>{t("Demo v{version}", { version: demo.version_number })}</strong>
               <p className="meta">
                 {demo.duration_seconds}s - {formatBytes(demo.size_bytes)}
               </p>
@@ -144,7 +154,7 @@ export function DemoWorkspace({
           ))}
         </div>
       ) : (
-        <p className="empty">Generated WAV demos will appear here for browser playback.</p>
+        <p className="empty">{t("Generated WAV demos will appear here for browser playback.")}</p>
       )}
     </section>
   );

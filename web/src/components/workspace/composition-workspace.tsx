@@ -5,6 +5,7 @@ import { FormEvent } from "react";
 
 import { DownloadButton } from "@/components/workspace/download-button";
 import { formatBytes } from "@/components/workspace/workspace-format";
+import { useLocale } from "@/i18n/locale-provider";
 import {
   ChordProgressionVersion,
   ChordSection,
@@ -114,10 +115,11 @@ function LyricsPanel({
   onSectionChange: (index: number, text: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t, text } = useLocale();
   return (
     <section className="panel" aria-labelledby="lyrics-title">
       <div className="section-heading">
-        <h2 id="lyrics-title">Lyrics</h2>
+        <h2 id="lyrics-title">{t("Lyrics")}</h2>
         {activeLyrics ? <span className="badge">v{activeLyrics.version_number}</span> : null}
       </div>
       <button
@@ -127,13 +129,13 @@ function LyricsPanel({
         type="button"
       >
         <FilePlus2 aria-hidden="true" size={18} />
-        Generate lyrics
+        {t("Generate lyrics")}
       </button>
       {activeLyrics ? (
         <form className="form compact-form" onSubmit={onSubmit}>
           {lyricDraft.map((section, index) => (
             <div className="field" key={section.section_id}>
-              <label htmlFor={`lyrics-${section.section_id}`}>{section.label}</label>
+              <label htmlFor={`lyrics-${section.section_id}`}>{text(section.label)}</label>
               <textarea
                 id={`lyrics-${section.section_id}`}
                 onChange={(event) => onSectionChange(index, event.target.value)}
@@ -143,10 +145,10 @@ function LyricsPanel({
           ))}
           {hookDraft.length ? (
             <div className="mini-list">
-              <p className="meta">Hook candidates</p>
+              <p className="meta">{t("Hook candidates")}</p>
               {hookDraft.map((hook, index) => (
                 <input
-                  aria-label={`Hook candidate ${index + 1}`}
+                  aria-label={t("Hook candidate {number}", { number: index + 1 })}
                   key={hook.id}
                   onChange={(event) => onHookChange(index, event.target.value)}
                   value={hook.text}
@@ -156,11 +158,11 @@ function LyricsPanel({
           ) : null}
           <button className="button" disabled={isSaving} type="submit">
             <Save aria-hidden="true" size={18} />
-            Save lyrics version
+            {t("Save lyrics version")}
           </button>
         </form>
       ) : (
-        <p className="empty">Approve a SongSpec, then generate a lyrics draft.</p>
+        <p className="empty">{t("Approve a SongSpec, then generate a lyrics draft.")}</p>
       )}
     </section>
   );
@@ -185,10 +187,11 @@ function ChordsPanel({
   onGenerate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t, text } = useLocale();
   return (
     <section className="panel" aria-labelledby="chords-title">
       <div className="section-heading">
-        <h2 id="chords-title">Chords</h2>
+        <h2 id="chords-title">{t("Chords")}</h2>
         {activeChords ? <span className="badge">v{activeChords.version_number}</span> : null}
       </div>
       <button
@@ -198,14 +201,14 @@ function ChordsPanel({
         type="button"
       >
         <Music2 aria-hidden="true" size={18} />
-        Generate chords
+        {t("Generate chords")}
       </button>
       {activeChords ? (
         <form className="form compact-form" onSubmit={onSubmit}>
           {chordDraft.map((section, index) => (
             <div className="chord-editor-row" key={section.section_id}>
               <div className="field">
-                <label htmlFor={`chords-${section.section_id}`}>{section.label}</label>
+                <label htmlFor={`chords-${section.section_id}`}>{text(section.label)}</label>
                 <input
                   id={`chords-${section.section_id}`}
                   onChange={(event) => onChordsChange(index, splitChordInput(event.target.value))}
@@ -213,7 +216,7 @@ function ChordsPanel({
                 />
               </div>
               <div className="field narrow-field">
-                <label htmlFor={`bars-${section.section_id}`}>Bars</label>
+                <label htmlFor={`bars-${section.section_id}`}>{t("Bars")}</label>
                 <input
                   id={`bars-${section.section_id}`}
                   min={1}
@@ -226,11 +229,11 @@ function ChordsPanel({
           ))}
           <button className="button" disabled={isSaving} type="submit">
             <Save aria-hidden="true" size={18} />
-            Save chords version
+            {t("Save chords version")}
           </button>
         </form>
       ) : (
-        <p className="empty">Approve a SongSpec, then generate a chord progression.</p>
+        <p className="empty">{t("Approve a SongSpec, then generate a chord progression.")}</p>
       )}
     </section>
   );
@@ -249,6 +252,7 @@ function MidiPanel({
   onGenerate: () => void;
   projectId: string;
 }) {
+  const { t, text } = useLocale();
   return (
     <section className="panel" aria-labelledby="midi-title">
       <div className="section-heading">
@@ -262,7 +266,7 @@ function MidiPanel({
         type="button"
       >
         <Music2 aria-hidden="true" size={18} />
-        Generate MIDI
+        {t("Generate MIDI")}
       </button>
       {assets.length ? (
         <div className="asset-list">
@@ -271,7 +275,7 @@ function MidiPanel({
               <div>
                 <strong>{asset.filename}</strong>
                 <p className="meta">
-                  {asset.kind} v{asset.version_number} - {formatBytes(asset.size_bytes)}
+                  {text(asset.kind)} v{asset.version_number} - {formatBytes(asset.size_bytes)}
                 </p>
               </div>
               <DownloadButton
@@ -282,7 +286,7 @@ function MidiPanel({
           ))}
         </div>
       ) : (
-        <p className="empty">Generated chord, melody, and hook MIDI files will appear here.</p>
+        <p className="empty">{t("Generated chord, melody, and hook MIDI files will appear here.")}</p>
       )}
     </section>
   );

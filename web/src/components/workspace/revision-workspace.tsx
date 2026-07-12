@@ -3,6 +3,7 @@
 import { Check, GitCompare, Music2, RotateCcw, XCircle } from "lucide-react";
 import { FormEvent } from "react";
 
+import { useLocale } from "@/i18n/locale-provider";
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
@@ -48,48 +49,49 @@ export function RevisionWorkspace({
   revisions,
   versionDiff,
 }: RevisionWorkspaceProps) {
+  const { dateTime, t, text } = useLocale();
   const latestPlanned = revisions.find((revision) => revision.status === "planned") ?? null;
   const canApplyLatest = latestPlanned ? canApplyRevision(latestPlanned) : false;
   return (
     <section className="panel revision-panel" aria-labelledby="revision-title">
       <div className="section-heading">
-        <h2 id="revision-title">Revisions</h2>
+        <h2 id="revision-title">{t("Revisions")}</h2>
         <span className="badge">{revisions.length}</span>
       </div>
       <form className="form" onSubmit={onPlan}>
         <div className="field">
-          <label htmlFor="revision-feedback">Feedback</label>
+          <label htmlFor="revision-feedback">{t("Feedback")}</label>
           <textarea
             id="revision-feedback"
             onChange={(event) => onFeedbackChange(event.target.value)}
-            placeholder="Make the chorus lyric stronger, lift the chorus melody, or make the bridge more sparse..."
+            placeholder={t("Make the chorus lyric stronger, lift the chorus melody, or make the bridge more sparse...")}
             value={feedback}
           />
         </div>
         <button className="button" disabled={isSaving} type="submit">
           <GitCompare aria-hidden="true" size={18} />
-          Plan revision
+          {t("Plan revision")}
         </button>
       </form>
 
       {latestPlanned ? (
         <div className="revision-block">
           <div className="section-heading">
-            <h3>Impact preview</h3>
-            <span className="badge">{latestPlanned.status}</span>
+            <h3>{t("Impact preview")}</h3>
+            <span className="badge">{text(latestPlanned.status)}</span>
           </div>
           <div className="revision-task-list">
             {latestPlanned.tasks.map((task) => (
               <div className="revision-task-row" key={task.id}>
                 <div>
-                  <strong>{formatRevisionTarget(task.target)}</strong>
-                  <p className="meta">{task.summary}</p>
+                  <strong>{formatRevisionTarget(task.target, t)}</strong>
+                  <p className="meta">{text(task.summary)}</p>
                   <p className="meta">
-                    {task.target_section_id ?? "all sections"} -{" "}
-                    {task.requires_demo_regeneration ? "demo recommended" : "demo optional"}
+                    {task.target_section_id ? text(task.target_section_id) : t("all sections")} -{" "}
+                    {task.requires_demo_regeneration ? t("demo recommended") : t("demo optional")}
                   </p>
                 </div>
-                <span className="badge">{task.supported ? "supported" : "unsupported"}</span>
+                <span className="badge">{task.supported ? t("supported") : t("unsupported")}</span>
               </div>
             ))}
           </div>
@@ -101,7 +103,7 @@ export function RevisionWorkspace({
               type="button"
             >
               <Check aria-hidden="true" size={18} />
-              Apply
+              {t("Apply")}
             </button>
             <button
               className="button secondary"
@@ -110,7 +112,7 @@ export function RevisionWorkspace({
               type="button"
             >
               <Music2 aria-hidden="true" size={18} />
-              Apply + demo
+              {t("Apply + demo")}
             </button>
             <button
               className="button secondary"
@@ -119,82 +121,84 @@ export function RevisionWorkspace({
               type="button"
             >
               <XCircle aria-hidden="true" size={18} />
-              Reject
+              {t("Reject")}
             </button>
           </div>
         </div>
       ) : (
-        <p className="empty">Planned revisions will show their affected assets before changes are applied.</p>
+        <p className="empty">{t("Planned revisions will show their affected assets before changes are applied.")}</p>
       )}
 
       <div className="revision-block">
-        <h3>Version tools</h3>
+        <h3>{t("Version tools")}</h3>
         <div className="version-tool-grid">
           <VersionToolRow
             canRestore
             disabled={lyrics.length < 2 || isSaving}
-            label="Lyrics"
+            label={t("Lyrics")}
             onCompare={() => onCompare("lyrics", lyrics[1].id, lyrics[0].id)}
             onRestore={() => onRestore("lyrics", lyrics[1].id)}
-            subtitle={versionPairLabel(lyrics[1]?.version_number, lyrics[0]?.version_number)}
+            subtitle={versionPairLabel(lyrics[1]?.version_number, lyrics[0]?.version_number, t)}
           />
           <VersionToolRow
             canRestore
             disabled={melodyAssets.length < 2 || isSaving}
-            label="Melody MIDI"
+            label={t("Melody MIDI")}
             onCompare={() => onCompare("midi_melody", melodyAssets[1].id, melodyAssets[0].id)}
             onRestore={() => onRestore("midi_melody", melodyAssets[1].id)}
             subtitle={versionPairLabel(
               melodyAssets[1]?.version_number,
               melodyAssets[0]?.version_number,
+              t,
             )}
           />
           <VersionToolRow
             canRestore
             disabled={arrangements.length < 2 || isSaving}
-            label="Arrangement"
+            label={t("Arrangement")}
             onCompare={() => onCompare("arrangement", arrangements[1].id, arrangements[0].id)}
             onRestore={() => onRestore("arrangement", arrangements[1].id)}
             subtitle={versionPairLabel(
               arrangements[1]?.version_number,
               arrangements[0]?.version_number,
+              t,
             )}
           />
           <VersionToolRow
             disabled={demos.length < 2 || isSaving}
-            label="Demo"
+            label={t("Demo")}
             onCompare={() => onCompare("demo", demos[1].id, demos[0].id)}
-            subtitle={versionPairLabel(demos[1]?.version_number, demos[0]?.version_number)}
+            subtitle={versionPairLabel(demos[1]?.version_number, demos[0]?.version_number, t)}
           />
         </div>
         {versionDiff ? (
           <div className="diff-list">
             <div>
-              <strong>{formatVersionAssetType(versionDiff.asset_type)}</strong>
-              <p className="meta">{versionDiff.summary}</p>
+              <strong>{formatVersionAssetType(versionDiff.asset_type, t)}</strong>
+              <p className="meta">{text(versionDiff.summary)}</p>
             </div>
             {versionDiff.changes.length ? (
               versionDiff.changes.map((change) => (
                 <div className="diff-row" key={`${change.field}-${change.label}`}>
-                  <strong>{change.label}</strong>
-                  <p className="meta">{change.summary}</p>
+                  <strong>{text(change.label)}</strong>
+                  <p className="meta">{text(change.summary)}</p>
                   <p>
-                    <span className="meta">Before:</span> {change.left ?? "empty"}
+                    <span className="meta">{t("Before:")}</span> {change.left ?? t("empty")}
                   </p>
                   <p>
-                    <span className="meta">After:</span> {change.right ?? "empty"}
+                    <span className="meta">{t("After:")}</span> {change.right ?? t("empty")}
                   </p>
                 </div>
               ))
             ) : (
-              <p className="empty">No field-level changes detected.</p>
+              <p className="empty">{t("No field-level changes detected.")}</p>
             )}
           </div>
         ) : null}
       </div>
 
       <div className="revision-block">
-        <h3>Revision history</h3>
+        <h3>{t("Revision history")}</h3>
         {revisions.length ? (
           <div className="revision-task-list">
             {revisions.slice(0, 8).map((revision) => (
@@ -202,26 +206,27 @@ export function RevisionWorkspace({
                 <div>
                   <strong>{revision.feedback}</strong>
                   <p className="meta">
-                    {revision.status} - {new Date(revision.created_at).toLocaleString()}
+                    {text(revision.status)} - {dateTime(revision.created_at)}
                   </p>
                   {revision.created_versions.length ? (
                     <p className="meta">
-                      Created:{" "}
-                      {revision.created_versions
+                      {t("Created: {versions}", {
+                        versions: revision.created_versions
                         .map(
                           (version) =>
-                            `${formatRevisionTarget(version.asset_type)} v${version.version_number}`,
+                            `${formatRevisionTarget(version.asset_type, t)} v${version.version_number}`,
                         )
-                        .join(", ")}
+                        .join(", "),
+                      })}
                     </p>
                   ) : null}
                 </div>
-                <span className="badge">{revision.tasks.length} tasks</span>
+                <span className="badge">{t("{count} tasks", { count: revision.tasks.length })}</span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="empty">Revision history is empty.</p>
+          <p className="empty">{t("Revision history is empty.")}</p>
         )}
       </div>
     </section>
@@ -243,6 +248,7 @@ function VersionToolRow({
   onRestore?: () => void;
   subtitle: string;
 }) {
+  const { t } = useLocale();
   return (
     <div className="version-tool-row">
       <div>
@@ -257,7 +263,7 @@ function VersionToolRow({
           type="button"
         >
           <GitCompare aria-hidden="true" size={18} />
-          Diff
+          {t("Diff")}
         </button>
         {canRestore ? (
           <button
@@ -267,7 +273,7 @@ function VersionToolRow({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={18} />
-            Restore
+            {t("Restore")}
           </button>
         ) : null}
       </div>
@@ -275,26 +281,36 @@ function VersionToolRow({
   );
 }
 
-function formatRevisionTarget(value: RestoreAssetType | VersionAssetType): string {
+function formatRevisionTarget(
+  value: RestoreAssetType | VersionAssetType,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
   switch (value) {
     case "lyrics":
-      return "Lyrics";
+      return t("Lyrics");
     case "midi_melody":
-      return "Melody MIDI";
+      return t("Melody MIDI");
     case "arrangement":
-      return "Arrangement";
+      return t("Arrangement");
     case "demo":
-      return "Demo";
+      return t("Demo");
   }
 }
 
-function formatVersionAssetType(value: VersionAssetType): string {
-  return formatRevisionTarget(value);
+function formatVersionAssetType(
+  value: VersionAssetType,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  return formatRevisionTarget(value, t);
 }
 
-function versionPairLabel(left?: number, right?: number): string {
+function versionPairLabel(
+  left: number | undefined,
+  right: number | undefined,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
   if (left === undefined || right === undefined) {
-    return "Need at least two versions";
+    return t("Need at least two versions");
   }
-  return `Compare v${left} to v${right}`;
+  return t("Compare v{left} to v{right}", { left, right });
 }

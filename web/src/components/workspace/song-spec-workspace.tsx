@@ -3,6 +3,7 @@
 import { Check, FilePlus2, Save } from "lucide-react";
 import { FormEvent } from "react";
 
+import { useLocale } from "@/i18n/locale-provider";
 import { IdeaIntake, SongSpecVersion, isSongSpecComplete } from "@/lib/song-specs";
 
 export type SongSpecDraftForm = {
@@ -50,21 +51,22 @@ export function SongSpecWorkspace({
   onSongSpecSubmit,
   state,
 }: SongSpecWorkspaceProps) {
+  const { t, text } = useLocale();
   return (
     <div className="workspace-grid">
       <section className="panel" aria-labelledby="intake-title">
         <div className="section-heading">
-          <h2 id="intake-title">Idea intake</h2>
-          <span className="badge">{state}</span>
+          <h2 id="intake-title">{t("Idea intake")}</h2>
+          <span className="badge">{text(state)}</span>
         </div>
         <form className="form" onSubmit={onIntakeSubmit}>
           <div className="field">
-            <label htmlFor="idea">Song idea</label>
+            <label htmlFor="idea">{t("Song idea")}</label>
             <textarea
               id="idea"
               maxLength={4000}
               onChange={(event) => onIdeaChange(event.target.value)}
-              placeholder="Chinese indie rock song about riding home late at night..."
+              placeholder={t("Chinese indie rock song about riding home late at night...")}
               value={idea}
             />
           </div>
@@ -72,7 +74,7 @@ export function SongSpecWorkspace({
             <div className="question-list">
               {latestIntake.questions.map((question) => (
                 <div className="field" key={question.id}>
-                  <label htmlFor={question.id}>{question.prompt}</label>
+                  <label htmlFor={question.id}>{text(question.prompt)}</label>
                   <input
                     id={question.id}
                     onChange={(event) =>
@@ -89,7 +91,7 @@ export function SongSpecWorkspace({
           ) : null}
           <button className="button" disabled={isSaving} type="submit">
             <Save aria-hidden="true" size={18} />
-            Save intake
+            {t("Save intake")}
           </button>
         </form>
         <button
@@ -99,13 +101,13 @@ export function SongSpecWorkspace({
           type="button"
         >
           <FilePlus2 aria-hidden="true" size={18} />
-          Generate SongSpec draft
+          {t("Generate SongSpec draft")}
         </button>
       </section>
 
       <section className="panel" aria-labelledby="song-spec-title">
         <div className="section-heading">
-          <h2 id="song-spec-title">SongSpec editor</h2>
+          <h2 id="song-spec-title">{t("SongSpec editor")}</h2>
           {activeVersion ? <span className="badge">v{activeVersion.version_number}</span> : null}
         </div>
         {activeVersion ? (
@@ -118,7 +120,7 @@ export function SongSpecWorkspace({
             onSubmit={onSongSpecSubmit}
           />
         ) : (
-          <div className="empty">No SongSpec draft yet. Save an intake, then generate a draft.</div>
+          <div className="empty">{t("No SongSpec draft yet. Save an intake, then generate a draft.")}</div>
         )}
       </section>
     </div>
@@ -126,11 +128,12 @@ export function SongSpecWorkspace({
 }
 
 export function SongSpecVersionsPanel({ versions }: { versions: SongSpecVersion[] }) {
+  const { dateTime, t, text } = useLocale();
   return (
     <section className="panel" aria-labelledby="versions-title">
-      <h2 id="versions-title">SongSpec versions</h2>
+      <h2 id="versions-title">{t("SongSpec versions")}</h2>
       {versions.length === 0 ? (
-        <p className="empty">No versions have been generated.</p>
+        <p className="empty">{t("No versions have been generated.")}</p>
       ) : (
         <div className="version-list">
           {versions.map((version) => (
@@ -138,13 +141,13 @@ export function SongSpecVersionsPanel({ versions }: { versions: SongSpecVersion[
               <div>
                 <strong>v{version.version_number}</strong>
                 <p className="meta">
-                  {version.status} - {new Date(version.created_at).toLocaleString()}
+                  {text(version.status)} - {dateTime(version.created_at)}
                 </p>
               </div>
               <span className="meta">
                 {version.missing_required_fields.length
-                  ? `Missing ${version.missing_required_fields.length}`
-                  : "Complete"}
+                  ? t("Missing {count}", { count: version.missing_required_fields.length })
+                  : t("Complete")}
               </span>
             </div>
           ))}
@@ -169,41 +172,46 @@ function SongSpecEditor({
   onChange: (next: SongSpecDraftForm) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t, text } = useLocale();
   const complete = isSongSpecComplete(activeVersion.song_spec);
   return (
     <form className="form" onSubmit={onSubmit}>
-      <TextField id="theme" label="Theme" name="theme" onChange={onChange} state={draftForm} />
-      <TextField id="genre" label="Genre" name="genre" onChange={onChange} state={draftForm} />
+      <TextField id="theme" label={t("Theme")} name="theme" onChange={onChange} state={draftForm} />
+      <TextField id="genre" label={t("Genre")} name="genre" onChange={onChange} state={draftForm} />
       <div className="form-row">
-        <TextField id="language" label="Language" name="language" onChange={onChange} state={draftForm} />
-        <TextField id="tempo_bpm" label="BPM" name="tempo_bpm" onChange={onChange} state={draftForm} />
+        <TextField id="language" label={t("Language")} name="language" onChange={onChange} state={draftForm} />
+        <TextField id="tempo_bpm" label={t("BPM")} name="tempo_bpm" onChange={onChange} state={draftForm} />
       </div>
       <div className="form-row">
-        <TextField id="key" label="Key" name="key" onChange={onChange} state={draftForm} />
-        <TextField id="time_signature" label="Time" name="time_signature" onChange={onChange} state={draftForm} />
+        <TextField id="key" label={t("Key")} name="key" onChange={onChange} state={draftForm} />
+        <TextField id="time_signature" label={t("Time")} name="time_signature" onChange={onChange} state={draftForm} />
       </div>
       <TextField
         id="target_duration_seconds"
-        label="Duration seconds"
+        label={t("Duration seconds")}
         name="target_duration_seconds"
         onChange={onChange}
         state={draftForm}
       />
-      <TextAreaField id="mood_curve" label="Mood curve JSON" name="mood_curve" onChange={onChange} state={draftForm} />
+      <TextAreaField id="mood_curve" label={t("Mood curve JSON")} name="mood_curve" onChange={onChange} state={draftForm} />
       <TextAreaField
         id="song_structure"
-        label="Song structure, one section per line"
+        label={t("Song structure, one section per line")}
         name="song_structure"
         onChange={onChange}
         state={draftForm}
       />
       {activeVersion.missing_required_fields.length ? (
-        <p className="meta">Missing: {activeVersion.missing_required_fields.join(", ")}</p>
+        <p className="meta">
+          {t("Missing: {items}", {
+            items: activeVersion.missing_required_fields.map(text).join(", "),
+          })}
+        </p>
       ) : null}
       <div className="button-row">
         <button className="button" disabled={isSaving} type="submit">
           <Save aria-hidden="true" size={18} />
-          Save new version
+          {t("Save new version")}
         </button>
         <button
           className="button secondary"
@@ -212,7 +220,7 @@ function SongSpecEditor({
           type="button"
         >
           <Check aria-hidden="true" size={18} />
-          Approve
+          {t("Approve")}
         </button>
       </div>
     </form>

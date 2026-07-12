@@ -5,6 +5,7 @@ import { FormEvent } from "react";
 
 import { DownloadButton } from "@/components/workspace/download-button";
 import { formatBytes, formatPrerequisite } from "@/components/workspace/workspace-format";
+import { useLocale } from "@/i18n/locale-provider";
 import {
   ArrangementPlan,
   ArrangementPlanVersion,
@@ -92,10 +93,11 @@ function ArrangementPanel({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   plan: ArrangementPlan;
 }) {
+  const { t, text } = useLocale();
   return (
     <section className="panel" aria-labelledby="arrangement-title">
       <div className="section-heading">
-        <h2 id="arrangement-title">Arrangement</h2>
+        <h2 id="arrangement-title">{t("Arrangement")}</h2>
         {activeArrangement ? (
           <span className="badge">v{activeArrangement.version_number}</span>
         ) : null}
@@ -107,12 +109,12 @@ function ArrangementPanel({
         type="button"
       >
         <FilePlus2 aria-hidden="true" size={18} />
-        Generate arrangement
+        {t("Generate arrangement")}
       </button>
       {activeArrangement ? (
         <form className="form compact-form" onSubmit={onSubmit}>
           <div className="field">
-            <label htmlFor="arrangement-overview">Overview</label>
+            <label htmlFor="arrangement-overview">{t("Overview")}</label>
             <textarea
               id="arrangement-overview"
               onChange={(event) => onChange({ ...plan, overview: event.target.value })}
@@ -122,13 +124,13 @@ function ArrangementPanel({
           {plan.sections.map((section, index) => (
             <div className="arrangement-section" key={section.section_id}>
               <div className="section-heading">
-                <strong>{section.label}</strong>
+                <strong>{text(section.label)}</strong>
                 <span className="badge">{section.energy_level}/10</span>
               </div>
               <div className="form-row">
                 <div className="field">
                   <label htmlFor={`arrangement-instruments-${section.section_id}`}>
-                    Instruments
+                    {t("Instruments")}
                   </label>
                   <input
                     id={`arrangement-instruments-${section.section_id}`}
@@ -149,7 +151,7 @@ function ArrangementPanel({
                   />
                 </div>
                 <div className="field narrow-field">
-                  <label htmlFor={`arrangement-energy-${section.section_id}`}>Energy</label>
+                  <label htmlFor={`arrangement-energy-${section.section_id}`}>{t("Energy")}</label>
                   <input
                     id={`arrangement-energy-${section.section_id}`}
                     max={10}
@@ -171,7 +173,7 @@ function ArrangementPanel({
               </div>
               <div className="field">
                 <label htmlFor={`arrangement-notes-${section.section_id}`}>
-                  Production notes
+                  {t("Production notes")}
                 </label>
                 <textarea
                   id={`arrangement-notes-${section.section_id}`}
@@ -191,7 +193,7 @@ function ArrangementPanel({
             </div>
           ))}
           <div className="field">
-            <label htmlFor="arrangement-mix-notes">Mix notes</label>
+            <label htmlFor="arrangement-mix-notes">{t("Mix notes")}</label>
             <textarea
               id="arrangement-mix-notes"
               onChange={(event) => onChange({ ...plan, mix_notes: event.target.value })}
@@ -199,7 +201,7 @@ function ArrangementPanel({
             />
           </div>
           <div className="field">
-            <label htmlFor="arrangement-reference-notes">Reference notes</label>
+            <label htmlFor="arrangement-reference-notes">{t("Reference notes")}</label>
             <textarea
               id="arrangement-reference-notes"
               onChange={(event) => onChange({ ...plan, reference_notes: event.target.value })}
@@ -208,12 +210,12 @@ function ArrangementPanel({
           </div>
           <button className="button" disabled={isSaving} type="submit">
             <Save aria-hidden="true" size={18} />
-            Save arrangement version
+            {t("Save arrangement version")}
           </button>
         </form>
       ) : (
         <p className="empty">
-          Complete SongSpec, lyrics, chords, and MIDI before generating an arrangement.
+          {t("Complete SongSpec, lyrics, chords, and MIDI before generating an arrangement.")}
         </p>
       )}
     </section>
@@ -233,11 +235,12 @@ function ExportPanel({
   isSaving: boolean;
   onCreateExport: () => void;
 }) {
+  const { dateTime, locale, t, text } = useLocale();
   const missing = assetTree?.missing_prerequisites ?? [];
   return (
     <section className="panel" aria-labelledby="export-title">
       <div className="section-heading">
-        <h2 id="export-title">Export</h2>
+        <h2 id="export-title">{t("Export")}</h2>
         <span className="badge">{exports.length}</span>
       </div>
       <button
@@ -247,14 +250,16 @@ function ExportPanel({
         type="button"
       >
         <Download aria-hidden="true" size={18} />
-        Export ZIP
+        {t("Export ZIP")}
       </button>
       {missing.length ? (
-        <p className="empty">Missing: {missing.map(formatPrerequisite).join(", ")}</p>
+        <p className="empty">
+          {t("Missing: {items}", { items: missing.map((item) => text(formatPrerequisite(item))).join(", ") })}
+        </p>
       ) : null}
       {assetTree ? (
         <div className="asset-tree">
-          <h3>Current assets</h3>
+          <h3>{t("Current assets")}</h3>
           <div className="current-assets">
             {[
               assetTree.current.song_spec,
@@ -266,16 +271,16 @@ function ExportPanel({
               .filter(isAssetReference)
               .map((asset) => (
                 <span className="asset-pill" key={asset.id}>
-                  {asset.label}
+                  {text(asset.label)}
                 </span>
               ))}
           </div>
-          <h3>Timeline</h3>
+          <h3>{t("Timeline")}</h3>
           <div className="timeline-list">
             {assetTree.timeline.slice(0, 8).map((asset) => (
               <div className="timeline-row" key={`${asset.asset_type}-${asset.id}`}>
-                <span>{asset.label}</span>
-                <span className="meta">{new Date(asset.created_at).toLocaleString()}</span>
+                <span>{text(asset.label)}</span>
+                <span className="meta">{dateTime(asset.created_at)}</span>
               </div>
             ))}
           </div>
@@ -286,9 +291,11 @@ function ExportPanel({
           {exports.map((bundle) => (
             <div className="asset-row" key={bundle.id}>
               <div>
-                <strong>{bundle.filename ?? `Export ${bundle.id.slice(0, 8)}`}</strong>
+                <strong>
+                  {bundle.filename ?? t("Export {id}", { id: bundle.id.slice(0, 8) })}
+                </strong>
                 <p className="meta">
-                  {bundle.status} - {bundle.size_bytes ? formatBytes(bundle.size_bytes) : "no file"}
+                  {text(bundle.status)} - {bundle.size_bytes ? formatBytes(bundle.size_bytes) : t("no file")}
                 </p>
               </div>
               {bundle.download_url ? (
@@ -297,13 +304,19 @@ function ExportPanel({
                   url={exportDownloadEndpoint(apiBaseUrl, bundle.download_url)}
                 />
               ) : (
-                <span className="meta">{bundle.error_message ?? "Not downloadable"}</span>
+                <span className="meta">
+                  {bundle.error_message
+                    ? locale === "zh-CN" && text(bundle.error_message) === bundle.error_message
+                      ? t("Export failed")
+                      : text(bundle.error_message)
+                    : t("Not downloadable")}
+                </span>
               )}
             </div>
           ))}
         </div>
       ) : (
-        <p className="empty">Ready export bundles will appear here.</p>
+        <p className="empty">{t("Ready export bundles will appear here.")}</p>
       )}
     </section>
   );

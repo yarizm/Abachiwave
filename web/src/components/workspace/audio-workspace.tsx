@@ -6,13 +6,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { DownloadButton } from "@/components/workspace/download-button";
 import { Waveform } from "@/components/workspace/waveform";
 import { formatBytes } from "@/components/workspace/workspace-format";
+import { useLocale } from "@/i18n/locale-provider";
 import {
   AudioUpload,
   AudioUploadKind,
   AudioUploadStatus,
   GenerationRun,
   audioUploadDownloadEndpoint,
-  audioUploadStatusActionLabel,
   canCancelRun,
   isRunActive,
 } from "@/lib/composition";
@@ -61,6 +61,7 @@ export function AudioWorkspace({
   runs,
   uploads,
 }: AudioWorkspaceProps) {
+  const { dateTime, locale, t, text } = useLocale();
   const activeUploadIds = useMemo(
     () =>
       new Set(
@@ -74,13 +75,13 @@ export function AudioWorkspace({
   return (
     <section className="panel audio-panel" aria-labelledby="audio-title">
       <div className="section-heading">
-        <h2 id="audio-title">Audio</h2>
+        <h2 id="audio-title">{t("Audio")}</h2>
         <span className="badge">{uploads.length}</span>
       </div>
       <form className="form audio-upload-form" onSubmit={onUpload}>
         <div className="form-row">
           <div className="field">
-            <label htmlFor="audio-file">WAV file</label>
+            <label htmlFor="audio-file">{t("WAV file")}</label>
             <input
               accept="audio/wav,audio/x-wav,.wav"
               id="audio-file"
@@ -89,31 +90,31 @@ export function AudioWorkspace({
             />
           </div>
           <div className="field">
-            <label htmlFor="audio-kind">Kind</label>
+            <label htmlFor="audio-kind">{t("Kind")}</label>
             <select
               id="audio-kind"
               onChange={(event) => onKindChange(event.target.value as AudioUploadKind)}
               value={kind}
             >
-              <option value="humming">Humming</option>
-              <option value="reference">Reference</option>
-              <option value="scratch">Scratch</option>
-              <option value="other">Other</option>
+              <option value="humming">{t("Humming")}</option>
+              <option value="reference">{t("Reference")}</option>
+              <option value="scratch">{t("Scratch")}</option>
+              <option value="other">{t("Other")}</option>
             </select>
           </div>
         </div>
         <div className="field">
-          <label htmlFor="audio-notes">Notes</label>
+          <label htmlFor="audio-notes">{t("Notes")}</label>
           <textarea
             id="audio-notes"
             onChange={(event) => onNotesChange(event.target.value)}
-            placeholder="Chorus melody sketch, reference groove, or scratch idea..."
+            placeholder={t("Chorus melody sketch, reference groove, or scratch idea...")}
             value={notes}
           />
         </div>
         <button className="button" disabled={isSaving || !file} type="submit">
           <Upload aria-hidden="true" size={18} />
-          Upload WAV
+          {t("Upload WAV")}
         </button>
       </form>
 
@@ -124,12 +125,20 @@ export function AudioWorkspace({
               <div>
                 <strong>{run.provider_name}</strong>
                 <p className="meta">
-                  {run.status} - {new Date(run.created_at).toLocaleString()}
+                  {text(run.status)} - {dateTime(run.created_at)}
                 </p>
                 {run.result_midi_asset_id ? (
-                  <p className="meta">MIDI ready: {run.result_midi_asset_id.slice(0, 8)}</p>
+                  <p className="meta">
+                    {t("MIDI ready: {id}", { id: run.result_midi_asset_id.slice(0, 8) })}
+                  </p>
                 ) : null}
-                {run.error_message ? <p className="error">{run.error_message}</p> : null}
+                {run.error_message ? (
+                  <p className="error">
+                    {locale === "zh-CN" && text(run.error_message) === run.error_message
+                      ? t("Task failed")
+                      : text(run.error_message)}
+                  </p>
+                ) : null}
               </div>
               {canCancelRun(run) ? (
                 <button
@@ -139,10 +148,12 @@ export function AudioWorkspace({
                   type="button"
                 >
                   <XCircle aria-hidden="true" size={18} />
-                  Cancel
+                  {t("Cancel")}
                 </button>
               ) : (
-                <span className="badge">{run.result_midi_asset_id ? "midi ready" : run.status}</span>
+                <span className="badge">
+                  {text(run.result_midi_asset_id ? "midi ready" : run.status)}
+                </span>
               )}
             </div>
           ))}
@@ -165,7 +176,7 @@ export function AudioWorkspace({
           ))}
         </div>
       ) : (
-        <p className="empty">Uploaded WAV sketches and references will appear here.</p>
+        <p className="empty">{t("Uploaded WAV sketches and references will appear here.")}</p>
       )}
     </section>
   );
@@ -188,6 +199,7 @@ function AudioUploadRow({
   projectId: string;
   upload: AudioUpload;
 }) {
+  const { t, text } = useLocale();
   const [kindDraft, setKindDraft] = useState<AudioUploadKind>(upload.kind);
   const [notesDraft, setNotesDraft] = useState(upload.notes ?? "");
   const StatusIcon = upload.status === "archived" ? ArchiveRestore : Archive;
@@ -224,8 +236,8 @@ function AudioUploadRow({
             </p>
           </div>
           <div className="badge-row">
-            <span className="badge">{upload.kind}</span>
-            <span className={`badge audio-status-${upload.status}`}>{upload.status}</span>
+            <span className="badge">{text(upload.kind)}</span>
+            <span className={`badge audio-status-${upload.status}`}>{text(upload.status)}</span>
           </div>
         </div>
         <Waveform peaks={upload.waveform_peaks} />
@@ -236,21 +248,21 @@ function AudioUploadRow({
         />
         <form className="audio-upload-editor" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor={`audio-kind-${upload.id}`}>Kind</label>
+            <label htmlFor={`audio-kind-${upload.id}`}>{t("Kind")}</label>
             <select
               disabled={isSaving}
               id={`audio-kind-${upload.id}`}
               onChange={(event) => setKindDraft(event.target.value as AudioUploadKind)}
               value={kindDraft}
             >
-              <option value="humming">Humming</option>
-              <option value="reference">Reference</option>
-              <option value="scratch">Scratch</option>
-              <option value="other">Other</option>
+              <option value="humming">{t("Humming")}</option>
+              <option value="reference">{t("Reference")}</option>
+              <option value="scratch">{t("Scratch")}</option>
+              <option value="other">{t("Other")}</option>
             </select>
           </div>
           <div className="field">
-            <label htmlFor={`audio-notes-${upload.id}`}>Notes</label>
+            <label htmlFor={`audio-notes-${upload.id}`}>{t("Notes")}</label>
             <textarea
               disabled={isSaving}
               id={`audio-notes-${upload.id}`}
@@ -261,7 +273,7 @@ function AudioUploadRow({
           </div>
           <button className="button secondary" disabled={isSaving} type="submit">
             <Save aria-hidden="true" size={18} />
-            Save
+            {t("Save")}
           </button>
         </form>
       </div>
@@ -277,7 +289,7 @@ function AudioUploadRow({
           type="button"
         >
           <StatusIcon aria-hidden="true" size={18} />
-          {audioUploadStatusActionLabel(upload.status)}
+          {upload.status === "archived" ? t("Restore") : t("Archive")}
         </button>
         <button
           className="button secondary icon-button"
@@ -286,7 +298,7 @@ function AudioUploadRow({
           type="button"
         >
           <Music2 aria-hidden="true" size={18} />
-          {isExtracting ? "Extracting" : "Extract MIDI"}
+          {isExtracting ? t("Extracting") : t("Extract MIDI")}
         </button>
       </div>
     </div>

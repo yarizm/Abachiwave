@@ -58,6 +58,46 @@ test.describe("project workspace", () => {
     await expect(page.getByText("Project name is required.")).toBeVisible();
   });
 
+  test("switches the complete UI to Chinese and persists the setting", async ({ page }) => {
+    await page.goto("/projects");
+    await page.getByRole("combobox", { name: "Language" }).selectOption("zh-CN");
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    await expect(page.getByRole("link", { name: "项目" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "创建项目" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "搜索项目" })).toBeVisible();
+    await expect(page.getByText(/\d+ 个进行中 - \d+ 个已归档/)).toBeVisible();
+
+    await page.getByRole("textbox", { name: "搜索项目" }).fill(project.name);
+    await page.getByRole("link", { name: new RegExp(project.name) }).click();
+    await expect(page.getByRole("heading", { name: "项目审查" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "交接摘要" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "项目设置" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "灵感输入" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "SongSpec 编辑器" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "音频" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "歌词" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "和弦" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "编曲方案" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "导出" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "修改请求" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "评论" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "活动记录" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "SongSpec 版本" })).toBeVisible();
+    await expect(page.getByText("生成资产前请先确认完整的 SongSpec。").first()).toBeVisible();
+    await expect(page.locator(".handoff-markdown")).toHaveValue(/当前资产/);
+    await expect(page.getByText("Project settings", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Idea intake", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "生成歌词" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "生成 WAV Demo" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "导出 ZIP" })).toBeDisabled();
+
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    await expect(page.getByRole("combobox", { name: "语言" })).toHaveValue("zh-CN");
+    await expect(page.getByRole("heading", { name: "灵感输入" })).toBeVisible();
+  });
+
   test("recovers after a transient intake failure", async ({ page }) => {
     await page.goto(`/projects/${project.id}`);
     await expect(page.getByRole("heading", { name: project.name })).toBeVisible();

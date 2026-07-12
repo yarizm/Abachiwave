@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { useState } from "react";
 
+import { useLocale } from "@/i18n/locale-provider";
 import { fetchBlob } from "@/lib/api-client";
 
 type DownloadButtonProps = {
@@ -11,6 +12,7 @@ type DownloadButtonProps = {
 };
 
 export function DownloadButton({ filename, url }: DownloadButtonProps) {
+  const { errorMessage, t } = useLocale();
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +29,7 @@ export function DownloadButton({ filename, url }: DownloadButtonProps) {
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : "Download failed");
+      setError(errorMessage(downloadError, "Download failed"));
     } finally {
       setIsDownloading(false);
     }
@@ -42,7 +44,7 @@ export function DownloadButton({ filename, url }: DownloadButtonProps) {
         type="button"
       >
         <Download aria-hidden="true" size={18} />
-        {isDownloading ? "Downloading" : "Download"}
+        {isDownloading ? t("Downloading") : t("Download")}
       </button>
       {error ? (
         <span className="meta error" role="alert">
