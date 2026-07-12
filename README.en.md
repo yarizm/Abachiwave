@@ -20,7 +20,7 @@ See [abachiwave_development_plan.md](abachiwave_development_plan.md) for the pro
 
 ## Status
 
-Milestones 0-6 are implemented for local MVP use, and Milestone 7 engineering stabilization, real-dependency CI, browser acceptance coverage, security scans, and operations documentation are in place. The only external limitation is that protecting `main` on this private repository requires GitHub Pro or making the repository public; see [Issue #8](https://github.com/yarizm/Abachiwave/issues/8).
+Milestones 0-6 are implemented for local MVP use, and Milestone 7 engineering stabilization, real-dependency CI, browser acceptance coverage, security scans, and operations documentation are in place. The public repository protects `main` and requires Backend, Frontend, Security, Integration, and Browser checks before merging.
 
 - FastAPI API, Pydantic v2, SQLAlchemy 2.x, and Alembic.
 - Docker Compose stack with PostgreSQL, Redis, MinIO, API, worker, and web.
