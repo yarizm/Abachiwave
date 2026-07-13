@@ -49,6 +49,12 @@ class Settings(BaseSettings):
         le=1000,
         validation_alias="MAX_PROJECT_UPLOADS",
     )
+    max_export_bundle_bytes: int = Field(
+        512 * 1024 * 1024,
+        ge=1024 * 1024,
+        le=10 * 1024 * 1024 * 1024,
+        validation_alias="MAX_EXPORT_BUNDLE_BYTES",
+    )
     request_id_header: str = Field("X-Request-ID", validation_alias="REQUEST_ID_HEADER")
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]

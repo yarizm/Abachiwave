@@ -23,8 +23,18 @@ async def create_project(session: AsyncSession, payload: ProjectCreate) -> Proje
     return project
 
 
-async def list_projects(session: AsyncSession) -> list[Project]:
-    statement: Select[tuple[Project]] = select(Project).order_by(Project.created_at.desc())
+async def list_projects(
+    session: AsyncSession,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[Project]:
+    statement: Select[tuple[Project]] = (
+        select(Project)
+        .order_by(Project.created_at.desc(), Project.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(statement)
     return list(result.scalars().all())
 

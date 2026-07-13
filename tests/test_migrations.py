@@ -43,3 +43,20 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
             for row in connection.execute("pragma table_info(audio_demo_versions)").fetchall()
         }
     assert "waveform_peaks" in demo_columns
+    with sqlite3.connect(db_path) as connection:
+        indexes = {
+            row[0]
+            for row in connection.execute(
+                "select name from sqlite_master where type = 'index'"
+            ).fetchall()
+        }
+    assert {
+        "ix_projects_created_at",
+        "ix_audio_uploads_project_created",
+        "ix_project_comments_project_created",
+        "ix_revision_requests_project_created",
+        "ix_project_events_project_created",
+        "ix_generation_runs_project_created",
+        "ix_audio_demo_versions_project_created",
+        "ix_export_bundles_project_created",
+    }.issubset(indexes)

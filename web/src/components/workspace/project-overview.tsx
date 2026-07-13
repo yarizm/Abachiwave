@@ -4,7 +4,8 @@ import { Archive, ArchiveRestore, RefreshCw, Save } from "lucide-react";
 import { FormEvent } from "react";
 
 import { HandoffPanel, ReviewPanel } from "@/components/workspace/project-summary-panels";
-import { Project, projectStatusActionLabel } from "@/lib/projects";
+import { useLocale } from "@/i18n/locale-provider";
+import { Project } from "@/lib/projects";
 import { ProjectHandoff, ProjectReview } from "@/lib/composition";
 
 type ProjectOverviewProps = {
@@ -38,22 +39,23 @@ export function ProjectOverview({
   project,
   review,
 }: ProjectOverviewProps) {
+  const { t, text } = useLocale();
   return (
     <>
       <section className="workspace-header">
         <div>
-          <p className="meta">Project workspace</p>
+          <p className="meta">{t("Project workspace")}</p>
           <div className="workspace-title-row">
-            <h1>{project?.name ?? "Loading project"}</h1>
+            <h1>{project?.name ?? t("Loading project")}</h1>
             {project ? (
-              <span className={`badge project-${project.status}`}>{project.status}</span>
+              <span className={`badge project-${project.status}`}>{text(project.status)}</span>
             ) : null}
           </div>
           {project?.description ? <p>{project.description}</p> : null}
         </div>
         <button className="button secondary" disabled={isLoading} onClick={onRefresh} type="button">
           <RefreshCw aria-hidden="true" size={18} />
-          Refresh
+          {t("Refresh")}
         </button>
       </section>
 
@@ -96,18 +98,19 @@ function ProjectSettingsPanel({
   onSubmit,
   project,
 }: ProjectSettingsPanelProps) {
+  const { dateTime, t, text } = useLocale();
   const StatusIcon = project?.status === "archived" ? ArchiveRestore : Archive;
 
   return (
     <section className="panel project-settings-panel" aria-labelledby="project-settings-title">
       <div className="section-heading">
-        <h2 id="project-settings-title">Project settings</h2>
-        {project ? <span className={`badge project-${project.status}`}>{project.status}</span> : null}
+        <h2 id="project-settings-title">{t("Project settings")}</h2>
+        {project ? <span className={`badge project-${project.status}`}>{text(project.status)}</span> : null}
       </div>
       <div className="project-settings-grid">
         <form className="form" onSubmit={onSubmit}>
           <div className="field">
-            <label htmlFor="project-settings-name">Name</label>
+            <label htmlFor="project-settings-name">{t("Name")}</label>
             <input
               disabled={!project || isSaving}
               id="project-settings-name"
@@ -117,7 +120,7 @@ function ProjectSettingsPanel({
             />
           </div>
           <div className="field">
-            <label htmlFor="project-settings-description">Description</label>
+            <label htmlFor="project-settings-description">{t("Description")}</label>
             <textarea
               disabled={!project || isSaving}
               id="project-settings-description"
@@ -129,14 +132,16 @@ function ProjectSettingsPanel({
           <div className="button-row">
             <button className="button" disabled={!project || isSaving} type="submit">
               <Save aria-hidden="true" size={18} />
-              Save details
+              {t("Save details")}
             </button>
           </div>
         </form>
         <div className="status-action">
-          <p className="meta">Current status: {project?.status ?? "loading"}</p>
           <p className="meta">
-            Updated {project ? new Date(project.updated_at).toLocaleString() : "..."}
+            {t("Current status: {status}", { status: text(project?.status ?? "loading") })}
+          </p>
+          <p className="meta">
+            {t("Updated {date}", { date: project ? dateTime(project.updated_at) : "..." })}
           </p>
           <button
             className="button secondary"
@@ -145,7 +150,11 @@ function ProjectSettingsPanel({
             type="button"
           >
             <StatusIcon aria-hidden="true" size={18} />
-            {project ? projectStatusActionLabel(project.status) : "Loading status"}
+            {project
+              ? project.status === "archived"
+                ? t("Restore project")
+                : t("Archive project")
+              : t("Loading status")}
           </button>
         </div>
       </div>

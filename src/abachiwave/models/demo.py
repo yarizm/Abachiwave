@@ -2,7 +2,17 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -23,6 +33,9 @@ class GenerationRunType(StrEnum):
 
 class GenerationRun(Base):
     __tablename__ = "generation_runs"
+    __table_args__ = (
+        Index("ix_generation_runs_project_created", "project_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
@@ -85,6 +98,7 @@ class AudioDemoVersion(Base):
             "version_number",
             name="uq_audio_demo_versions_project_version",
         ),
+        Index("ix_audio_demo_versions_project_created", "project_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

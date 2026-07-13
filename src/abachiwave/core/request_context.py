@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
+from time import perf_counter
 from uuid import uuid4
 
 import structlog
@@ -46,6 +47,7 @@ async def request_context_middleware(
         **request_path_context(request.url.path),
     )
     logger = structlog.get_logger("abachiwave.request")
+    started_at = perf_counter()
 
     try:
         response = await call_next(request)
@@ -54,6 +56,23 @@ async def request_context_middleware(
         response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     response.headers[settings.request_id_header] = request_id
-    logger.info("request_completed", status_code=response.status_code)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'none'; frame-ancestors 'none'",
+    )
+    if settings.app_env == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    logger.info(
+        "request_completed",
+        status_code=response.status_code,
+        duration_ms=round((perf_counter() - started_at) * 1000, 2),
+    )
     structlog.contextvars.clear_contextvars()
     return response

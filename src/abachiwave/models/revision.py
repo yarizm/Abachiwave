@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -22,6 +22,9 @@ class RevisionTaskTarget(StrEnum):
 
 class RevisionRequest(Base):
     __tablename__ = "revision_requests"
+    __table_args__ = (
+        Index("ix_revision_requests_project_created", "project_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
@@ -57,6 +60,9 @@ class RevisionRequest(Base):
 
 class ProjectEvent(Base):
     __tablename__ = "project_events"
+    __table_args__ = (
+        Index("ix_project_events_project_created", "project_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(

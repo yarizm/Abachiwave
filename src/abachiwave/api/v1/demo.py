@@ -1,5 +1,3 @@
-from collections.abc import AsyncIterator
-from io import BytesIO
 from typing import Annotated
 from uuid import UUID
 
@@ -7,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.schemas.demo import AudioDemoVersionRead, DemoGenerateRequest, GenerationRunRead
 from abachiwave.services.demo import (
@@ -21,7 +20,7 @@ from abachiwave.services.demo import (
     retry_generation_run,
 )
 from abachiwave.services.song_specs import project_exists
-from abachiwave.services.storage import ObjectStorage, get_object_storage
+from abachiwave.services.storage import ObjectStorage, get_object_storage, iter_storage_bytes
 from abachiwave.services.task_queue import DemoTaskQueue, get_demo_task_queue
 
 router = APIRouter()
@@ -62,10 +61,11 @@ async def generate_demo_endpoint(
 async def list_demos_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[AudioDemoVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    demos = await list_demo_versions(session, project_id)
+    demos = await list_demo_versions(session, project_id, limit=page.limit, offset=page.offset)
     return [audio_demo_to_read(demo) for demo in demos]
 
 
@@ -98,16 +98,19 @@ async def download_demo_endpoint(
             detail="AudioDemoVersion not found",
         )
     try:
-        data = storage.get_bytes(demo.storage_key)
+        data = iter_storage_bytes(storage, demo.storage_key)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Demo file not found",
         ) from exc
     return StreamingResponse(
-        _byte_stream(data),
+        data,
         media_type=demo.content_type,
-        headers={"Content-Disposition": f'inline; filename="{demo.filename}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{demo.filename}"',
+            "Content-Length": str(demo.size_bytes),
+        },
     )
 
 
@@ -115,10 +118,11 @@ async def download_demo_endpoint(
 async def list_project_runs_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[GenerationRunRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    runs = await list_generation_runs(session, project_id)
+    runs = await list_generation_runs(session, project_id, limit=page.limit, offset=page.offset)
     return [await generation_run_to_read(session, run) for run in runs]
 
 
@@ -171,8 +175,3 @@ async def cancel_task_endpoint(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GenerationRun not found")
     return await generation_run_to_read(session, run)
-
-
-async def _byte_stream(data: bytes) -> AsyncIterator[bytes]:
-    buffer = BytesIO(data)
-    yield buffer.read()

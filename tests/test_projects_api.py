@@ -46,6 +46,27 @@ async def test_health(client: AsyncClient) -> None:
     assert live_response.status_code == 200
     assert live_response.json() == {"status": "ok"}
     assert live_response.headers["X-Request-ID"] == "health-check-1"
+    assert live_response.headers["X-Content-Type-Options"] == "nosniff"
+    assert live_response.headers["X-Frame-Options"] == "DENY"
+    assert live_response.headers["Content-Security-Policy"]
+
+
+@pytest.mark.asyncio
+async def test_project_list_supports_bounded_offset_pagination(client: AsyncClient) -> None:
+    for index in range(3):
+        response = await client.post("/api/v1/projects", json={"name": f"Page {index}"})
+        assert response.status_code == 201
+
+    full_response = await client.get("/api/v1/projects?limit=3")
+    first_response = await client.get("/api/v1/projects?limit=1")
+    second_response = await client.get("/api/v1/projects?limit=1&offset=1")
+
+    full = full_response.json()
+    assert first_response.json() == full[:1]
+    assert second_response.json() == full[1:2]
+
+    invalid_response = await client.get("/api/v1/projects?limit=201")
+    assert invalid_response.status_code == 422
 
 
 @pytest.mark.asyncio

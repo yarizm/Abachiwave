@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useGenerationRunPolling } from "./use-generation-run-polling";
+
+import { useLocale } from "@/i18n/locale-provider";
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
@@ -17,13 +20,13 @@ import {
   ProjectHandoff,
   ProjectReview,
   RevisionRequest,
-  isRunActive,
 } from "@/lib/composition";
 import { Project } from "@/lib/projects";
 import { IdeaIntake, SongSpecVersion } from "@/lib/song-specs";
 import { loadWorkspaceSnapshot } from "@/lib/workspace-api";
 
 export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
+  const { errorMessage } = useLocale();
   const [project, setProject] = useState<Project | null>(null);
   const [latestIntake, setLatestIntake] = useState<IdeaIntake | null>(null);
   const [versions, setVersions] = useState<SongSpecVersion[]>([]);
@@ -67,25 +70,29 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setProjectReview(snapshot.projectReview);
       setAudioUploads(snapshot.audioUploads);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load workspace");
+      setError(errorMessage(loadError, "Failed to load workspace"));
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, projectId]);
+  }, [apiBaseUrl, errorMessage, projectId]);
 
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
 
-  useEffect(() => {
-    if (!generationRuns.some(isRunActive)) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      void loadWorkspace();
-    }, 2500);
-    return () => window.clearInterval(intervalId);
-  }, [generationRuns, loadWorkspace]);
+  const handlePollingError = useCallback(
+    (pollError: unknown) => {
+      setError(errorMessage(pollError, "Failed to refresh task status"));
+    },
+    [errorMessage],
+  );
+  useGenerationRunPolling({
+    apiBaseUrl,
+    runs: generationRuns,
+    setRuns: setGenerationRuns,
+    onTerminal: loadWorkspace,
+    onError: handlePollingError,
+  });
 
   return {
     project,

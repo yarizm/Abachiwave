@@ -36,11 +36,17 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   minio-init:
     image: minio/mc:RELEASE.2024-11-21T17-21-54Z
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 2; done;
@@ -64,6 +70,8 @@ services:
       S3_BUCKET: abachiwave-dev
       TASK_TIMEOUT_SECONDS: 120
       MAX_PROJECT_UPLOADS: 100
+      MAX_EXPORT_BUNDLE_BYTES: 536870912
+      PYTHONPATH: /app/src
     ports:
       - "8000:8000"
     volumes:
@@ -75,6 +83,11 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   worker:
     build:
@@ -91,18 +104,26 @@ services:
       S3_BUCKET: abachiwave-dev
       TASK_TIMEOUT_SECONDS: 120
       MAX_PROJECT_UPLOADS: 100
+      MAX_EXPORT_BUNDLE_BYTES: 536870912
+      PYTHONPATH: /app/src
     volumes:
       - .:/app
     depends_on:
       redis:
         condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "arq", "--check", "abachiwave.worker.WorkerSettings"]
+      interval: 10s
+      timeout: 15s
+      retries: 6
 
   web:
     build:
       context: .
       dockerfile: web/Dockerfile
+      target: development
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
@@ -111,7 +132,13 @@ services:
       - ./web:/app
       - web_node_modules:/app/node_modules
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/projects').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:

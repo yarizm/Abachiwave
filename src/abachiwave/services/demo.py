@@ -217,11 +217,19 @@ async def execute_demo_generation(
             return failed_run
 
 
-async def list_demo_versions(session: AsyncSession, project_id: UUID) -> list[AudioDemoVersion]:
+async def list_demo_versions(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AudioDemoVersion]:
     statement: Select[tuple[AudioDemoVersion]] = (
         select(AudioDemoVersion)
         .where(AudioDemoVersion.project_id == str(project_id))
         .order_by(AudioDemoVersion.created_at.desc(), AudioDemoVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -240,11 +248,19 @@ async def get_demo_version(
     return result.scalar_one_or_none()
 
 
-async def list_generation_runs(session: AsyncSession, project_id: UUID) -> list[GenerationRun]:
+async def list_generation_runs(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[GenerationRun]:
     statement: Select[tuple[GenerationRun]] = (
         select(GenerationRun)
         .where(GenerationRun.project_id == str(project_id))
         .order_by(GenerationRun.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
