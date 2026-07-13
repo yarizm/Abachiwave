@@ -223,10 +223,13 @@ function formatEventDetail(
 }
 
 function summarizePayload(
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | null | undefined,
   t: ReturnType<typeof useLocale>["t"],
   text: (value: string) => string,
 ): string | null {
+  if (!payload) {
+    return null;
+  }
   if (typeof payload.feedback === "string") {
     return payload.feedback;
   }

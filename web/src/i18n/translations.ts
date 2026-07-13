@@ -516,11 +516,13 @@ function translatePattern(value: string): string | null {
   );
   if (revisionTask) {
     const target = translateText("zh-CN", revisionTask[2]);
-    const action = {
-      "Revise lyrics": "修改歌词",
-      "Raise the melody guide": "抬高旋律引导",
-      "Update arrangement notes": "更新编曲备注",
-    }[revisionTask[1]];
+    const action = (
+      {
+        "Revise lyrics": "修改歌词",
+        "Raise the melody guide": "抬高旋律引导",
+        "Update arrangement notes": "更新编曲备注",
+      } as Record<string, string>
+    )[revisionTask[1]];
     return `${action}：${target}。`;
   }
 

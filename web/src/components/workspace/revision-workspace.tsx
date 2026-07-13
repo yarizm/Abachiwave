@@ -294,6 +294,8 @@ function formatRevisionTarget(
       return t("Arrangement");
     case "demo":
       return t("Demo");
+    default:
+      return String(value);
   }
 }
 
