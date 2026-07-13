@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -15,6 +15,7 @@ class ProjectStatus(StrEnum):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (Index("ix_projects_created_at", "created_at"),)
 
     id: Mapped[str] = mapped_column(
         String(36),

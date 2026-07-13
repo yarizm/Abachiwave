@@ -138,11 +138,16 @@ async def get_idea_intake(
 async def list_song_spec_versions(
     session: AsyncSession,
     project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[SongSpecVersion]:
     statement: Select[tuple[SongSpecVersion]] = (
         select(SongSpecVersion)
         .where(SongSpecVersion.project_id == str(project_id))
         .order_by(SongSpecVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())

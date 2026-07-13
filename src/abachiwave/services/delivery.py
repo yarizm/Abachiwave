@@ -1,14 +1,12 @@
 import hmac
-import json
 from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from hashlib import sha256
-from io import BytesIO
+from tempfile import SpooledTemporaryFile
 from uuid import UUID, uuid4
-from zipfile import ZIP_DEFLATED, ZipFile
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,12 +34,10 @@ from abachiwave.schemas.composition import (
     ArrangementUpdate,
     AssetReference,
     AssetTreeRead,
-    ChordProgressionVersionRead,
     ChordSection,
     CurrentAssets,
     ExportBundleRead,
     LyricSection,
-    LyricsVersionRead,
 )
 from abachiwave.schemas.demo import AudioDemoVersionRead
 from abachiwave.schemas.projects import ProjectRead
@@ -50,16 +46,23 @@ from abachiwave.services.composition import (
     chord_progression_to_read,
     lyrics_version_to_read,
 )
+from abachiwave.services.delivery_archive import (
+    export_source_size,
+    file_size_and_checksum,
+    write_export_archive,
+)
 from abachiwave.services.events import add_project_event, list_project_events
 from abachiwave.services.handoff_format import (
     build_handoff_markdown,
     build_handoff_next_actions,
 )
 from abachiwave.services.song_specs import song_spec_to_data, song_spec_to_read
-from abachiwave.services.storage import ObjectStorage
+from abachiwave.services.storage import ObjectStorage, put_storage_file
 from abachiwave.services.versioning import create_version_with_retry
 
 EXPORT_CONTENT_TYPE = "application/zip"
+EXPORT_SPOOL_MEMORY_BYTES = 8 * 1024 * 1024
+ASSET_HISTORY_LIMIT = 200
 REQUIRED_MIDI_KINDS = (MidiAssetKind.chord, MidiAssetKind.melody, MidiAssetKind.hook)
 
 
@@ -130,11 +133,16 @@ def export_bundle_to_read(bundle: ExportBundle) -> ExportBundleRead:
 async def list_arrangement_plan_versions(
     session: AsyncSession,
     project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[ArrangementPlanVersion]:
     statement: Select[tuple[ArrangementPlanVersion]] = (
         select(ArrangementPlanVersion)
         .where(ArrangementPlanVersion.project_id == str(project_id))
         .order_by(ArrangementPlanVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -349,8 +357,31 @@ async def create_export_bundle(
     )
     stored_key: str | None = None
     try:
-        archive = _build_export_zip(project, export_assets, manifest, storage)
-        storage.put_bytes(storage_key, archive, EXPORT_CONTENT_TYPE)
+        source_size = export_source_size(export_assets.midi_assets, manifest)
+        max_size = get_settings().max_export_bundle_bytes
+        if source_size > max_size:
+            raise ValueError(
+                f"Export source assets exceed the {max_size} byte project export limit"
+            )
+        with SpooledTemporaryFile(
+            max_size=EXPORT_SPOOL_MEMORY_BYTES,
+            mode="w+b",
+        ) as archive:
+            write_export_archive(
+                archive,
+                project=project,
+                song_spec=song_spec_to_read(export_assets.song_spec),
+                lyrics=lyrics_version_to_read(export_assets.lyrics),
+                chords=chord_progression_to_read(export_assets.chords),
+                arrangement=arrangement_plan_to_read(export_assets.arrangement),
+                midi_assets=export_assets.midi_assets,
+                manifest=manifest,
+                storage=storage,
+            )
+            size_bytes, checksum = file_size_and_checksum(archive)
+            if size_bytes > max_size:
+                raise ValueError(f"Export archive exceeds the {max_size} byte limit")
+            put_storage_file(storage, storage_key, archive, EXPORT_CONTENT_TYPE)
         stored_key = storage_key
         bundle = ExportBundle(
             id=export_id,
@@ -361,8 +392,8 @@ async def create_export_bundle(
             storage_key=storage_key,
             filename=filename,
             content_type=EXPORT_CONTENT_TYPE,
-            size_bytes=len(archive),
-            checksum=sha256(archive).hexdigest(),
+            size_bytes=size_bytes,
+            checksum=checksum,
             download_token_hash=_hash_export_token(token),
         )
     except Exception as exc:
@@ -410,11 +441,19 @@ async def resolve_export_assets(
     return await _resolve_export_assets(session, project_id, arrangement_plan_id)
 
 
-async def list_export_bundles(session: AsyncSession, project_id: UUID) -> list[ExportBundle]:
+async def list_export_bundles(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[ExportBundle]:
     statement: Select[tuple[ExportBundle]] = (
         select(ExportBundle)
         .where(ExportBundle.project_id == str(project_id))
         .order_by(ExportBundle.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -721,168 +760,12 @@ async def _build_export_manifest(
     }
 
 
-def _build_export_zip(
-    project: Project,
-    assets: ExportAssets,
-    manifest: dict[str, object],
-    storage: ObjectStorage,
-) -> bytes:
-    buffer = BytesIO()
-    song_spec_read = song_spec_to_read(assets.song_spec)
-    lyrics_read = lyrics_version_to_read(assets.lyrics)
-    chords_read = chord_progression_to_read(assets.chords)
-    arrangement_read = arrangement_plan_to_read(assets.arrangement)
-    with ZipFile(buffer, mode="w", compression=ZIP_DEFLATED) as archive:
-        archive.writestr("README.md", _build_export_readme(project, manifest))
-        archive.writestr("manifest.json", _json_bytes(manifest))
-        archive.writestr("song-spec.json", _json_bytes(song_spec_read.model_dump(mode="json")))
-        archive.writestr("lyrics.json", _json_bytes(lyrics_read.model_dump(mode="json")))
-        archive.writestr("lyrics.md", _lyrics_markdown(lyrics_read))
-        archive.writestr("chords.json", _json_bytes(chords_read.model_dump(mode="json")))
-        archive.writestr("chords.md", _chords_markdown(chords_read))
-        archive.writestr("arrangement.json", _json_bytes(arrangement_read.model_dump(mode="json")))
-        archive.writestr("arrangement.md", _arrangement_markdown(arrangement_read))
-        archive.writestr("review.json", _json_bytes(manifest.get("review")))
-        archive.writestr("comments.json", _json_bytes(manifest.get("comments", [])))
-        archive.writestr("comments.md", _comments_markdown(manifest.get("comments", [])))
-        archive.writestr("events.json", _json_bytes(manifest.get("events", [])))
-        archive.writestr("handoff.json", _json_bytes(manifest.get("handoff")))
-        archive.writestr("handoff.md", _handoff_markdown_from_manifest(manifest))
-        archive.writestr("demos.json", _json_bytes(manifest.get("demos", [])))
-        archive.writestr("audio-uploads.json", _json_bytes(manifest.get("audio_uploads", [])))
-        for asset in assets.midi_assets:
-            archive.writestr(f"midi/{asset.filename}", storage.get_bytes(asset.storage_key))
-        for demo in _manifest_items(manifest.get("demos", [])):
-            archive_path = _manifest_string(demo, "archive_path")
-            storage_key = _manifest_string(demo, "storage_key")
-            if archive_path and storage_key:
-                archive.writestr(archive_path, storage.get_bytes(storage_key))
-        for upload in _manifest_items(manifest.get("audio_uploads", [])):
-            archive_path = _manifest_string(upload, "archive_path")
-            storage_key = _manifest_string(upload, "storage_key")
-            if archive_path and storage_key:
-                archive.writestr(archive_path, storage.get_bytes(storage_key))
-    return buffer.getvalue()
-
-
-def _build_export_readme(project: Project, manifest: dict[str, object]) -> str:
-    exported_at = manifest.get("exported_at", "")
-    return "\n".join(
-        [
-            f"# {project.name}",
-            "",
-            "Abachiwave project export.",
-            "",
-            f"- Project ID: `{project.id}`",
-            f"- Exported at: `{exported_at}`",
-            "",
-            "## Contents",
-            "",
-            "- `song-spec.json`",
-            "- `lyrics.md` / `lyrics.json`",
-            "- `chords.md` / `chords.json`",
-            "- `arrangement.md` / `arrangement.json`",
-            "- `comments.md` / `comments.json`",
-            "- `handoff.md` / `handoff.json`",
-            "- `review.json`",
-            "- `events.json`",
-            "- `demos.json` / `demos/*.wav`",
-            "- `audio-uploads.json` / `audio-uploads/*.wav`",
-            "- `midi/*.mid`",
-            "- `manifest.json`",
-            "",
-        ]
-    )
-
-
-def _handoff_markdown_from_manifest(manifest: dict[str, object]) -> str:
-    handoff = manifest.get("handoff")
-    if not isinstance(handoff, dict):
-        return "# Handoff\n\nNo handoff summary available.\n"
-    markdown = handoff.get("handoff_markdown")
-    return str(markdown) if markdown else "# Handoff\n\nNo handoff summary available.\n"
-
-
-def _lyrics_markdown(version: LyricsVersionRead) -> str:
-    lines = [f"# Lyrics v{version.version_number}", ""]
-    for section in version.sections:
-        lines.extend([f"## {section.label}", "", section.text, ""])
-    if version.hook_candidates:
-        lines.extend(["## Hook candidates", ""])
-        lines.extend([f"- {candidate.text}" for candidate in version.hook_candidates])
-        lines.append("")
-    return "\n".join(lines)
-
-
-def _chords_markdown(version: ChordProgressionVersionRead) -> str:
-    lines = [f"# Chords v{version.version_number}", ""]
-    for section in version.sections:
-        lines.extend(
-            [
-                f"## {section.label}",
-                "",
-                f"- Bars: {section.bars}",
-                f"- Chords: {' | '.join(section.chords)}",
-                "",
-            ]
-        )
-    return "\n".join(lines)
-
-
-def _arrangement_markdown(version: ArrangementPlanVersionRead) -> str:
-    plan = version.arrangement_plan
-    lines = [f"# Arrangement v{version.version_number}", "", plan.overview, ""]
-    for section in plan.sections:
-        lines.extend(
-            [
-                f"## {section.label}",
-                "",
-                f"- Energy: {section.energy_level}/10",
-                f"- Instruments: {', '.join(section.instruments)}",
-                f"- Notes: {section.production_notes}",
-                "",
-            ]
-        )
-    lines.extend(
-        ["## Mix notes", "", plan.mix_notes, "", "## Reference notes", "", plan.reference_notes, ""]
-    )
-    return "\n".join(lines)
-
-
-def _comments_markdown(value: object) -> str:
-    comments = value if isinstance(value, list) else []
-    lines = ["# Comments", ""]
-    if not comments:
-        lines.extend(["No comments recorded.", ""])
-        return "\n".join(lines)
-    for raw_comment in comments:
-        if not isinstance(raw_comment, dict):
-            continue
-        author = raw_comment.get("author_name", "Unknown")
-        status = raw_comment.get("status", "unknown")
-        target_type = raw_comment.get("target_type", "project")
-        target_id = raw_comment.get("target_id") or "project"
-        created_at = raw_comment.get("created_at", "")
-        body = raw_comment.get("body", "")
-        lines.extend(
-            [
-                f"## {author} - {status}",
-                "",
-                f"- Target: `{target_type}` `{target_id}`",
-                f"- Created: `{created_at}`",
-                "",
-                str(body),
-                "",
-            ]
-        )
-    return "\n".join(lines)
-
-
 async def _list_demo_versions(session: AsyncSession, project_id: UUID) -> list[AudioDemoVersion]:
     statement: Select[tuple[AudioDemoVersion]] = (
         select(AudioDemoVersion)
         .where(AudioDemoVersion.project_id == str(project_id))
         .order_by(AudioDemoVersion.created_at.desc(), AudioDemoVersion.version_number.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -899,6 +782,7 @@ async def _list_available_audio_uploads(
             AudioUpload.status == AudioUploadStatus.available,
         )
         .order_by(AudioUpload.created_at.desc(), AudioUpload.id.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -965,22 +849,12 @@ def _archive_filename(filename: str) -> str:
     return safe.strip(".-") or "asset.bin"
 
 
-def _manifest_items(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
-
-
-def _manifest_string(item: dict[str, object], key: str) -> str | None:
-    value = item.get(key)
-    return value if isinstance(value, str) else None
-
-
 async def _list_song_specs(session: AsyncSession, project_id: UUID) -> list[SongSpecVersion]:
     statement: Select[tuple[SongSpecVersion]] = (
         select(SongSpecVersion)
         .where(SongSpecVersion.project_id == str(project_id))
         .order_by(SongSpecVersion.version_number.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -991,6 +865,7 @@ async def _list_lyrics_versions(session: AsyncSession, project_id: UUID) -> list
         select(LyricsVersion)
         .where(LyricsVersion.project_id == str(project_id))
         .order_by(LyricsVersion.version_number.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -1004,6 +879,7 @@ async def _list_chord_versions(
         select(ChordProgressionVersion)
         .where(ChordProgressionVersion.project_id == str(project_id))
         .order_by(ChordProgressionVersion.version_number.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -1014,6 +890,7 @@ async def _list_midi_assets(session: AsyncSession, project_id: UUID) -> list[Mid
         select(MidiAssetVersion)
         .where(MidiAssetVersion.project_id == str(project_id))
         .order_by(MidiAssetVersion.created_at.desc(), MidiAssetVersion.version_number.desc())
+        .limit(ASSET_HISTORY_LIMIT)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -1118,10 +995,6 @@ def _arrangement_ref(version: ArrangementPlanVersion) -> AssetReference:
         version_number=version.version_number,
         created_at=version.created_at,
     )
-
-
-def _json_bytes(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def _export_token(export_id: str) -> str:

@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.schemas.handoff import ProjectHandoffRead
 from abachiwave.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
@@ -51,8 +52,9 @@ async def create_project_endpoint(
 @router.get("", response_model=list[ProjectRead])
 async def list_projects_endpoint(
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[ProjectRead]:
-    projects = await list_projects(session)
+    projects = await list_projects(session, limit=page.limit, offset=page.offset)
     return [ProjectRead.model_validate(project) for project in projects]
 
 
@@ -147,10 +149,16 @@ async def generate_song_spec_endpoint(
 async def list_song_spec_versions_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[SongSpecVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    song_specs = await list_song_spec_versions(session, project_id)
+    song_specs = await list_song_spec_versions(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [song_spec_to_read(song_spec) for song_spec in song_specs]
 
 

@@ -231,6 +231,7 @@ export const zhCN = {
   "Which sections should the song include?": "歌曲应包含哪些段落？",
   "Loading workspace": "正在加载工作台",
   "Failed to load workspace": "加载工作台失败",
+  "Failed to refresh task status": "刷新任务状态失败",
   "Failed to load projects": "加载项目失败",
   "Failed to create project": "创建项目失败",
   "Failed to save intake": "保存灵感失败",

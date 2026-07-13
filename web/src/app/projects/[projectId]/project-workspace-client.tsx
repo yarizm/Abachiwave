@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 
 import { useWorkspaceData } from "./hooks/use-workspace-data";
+import { usePendingActions } from "./hooks/use-pending-actions";
 
 import {
   CollaborationWorkspace,
@@ -11,18 +13,12 @@ import {
   makeCommentTargetValue,
   parseCommentTarget,
 } from "@/components/workspace/collaboration-workspace";
-import {
-  AudioUploadUpdatePayload,
-  AudioWorkspace,
-} from "@/components/workspace/audio-workspace";
-import { CompositionWorkspace } from "@/components/workspace/composition-workspace";
+import type { AudioUploadUpdatePayload } from "@/components/workspace/audio-workspace";
 import {
   DeliveryWorkspace,
   emptyArrangementPlan,
 } from "@/components/workspace/delivery-workspace";
-import { DemoWorkspace } from "@/components/workspace/demo-workspace";
 import { ProjectOverview } from "@/components/workspace/project-overview";
-import { RevisionWorkspace } from "@/components/workspace/revision-workspace";
 import {
   SongSpecDraftForm,
   SongSpecVersionsPanel,
@@ -114,6 +110,30 @@ import {
   workspaceState,
 } from "@/lib/song-specs";
 
+const workspaceLoading = () => <div className="workspace-panel-loading" aria-hidden="true" />;
+const AudioWorkspace = dynamic(
+  () => import("@/components/workspace/audio-workspace").then((module) => module.AudioWorkspace),
+  { loading: workspaceLoading },
+);
+const CompositionWorkspace = dynamic(
+  () =>
+    import("@/components/workspace/composition-workspace").then(
+      (module) => module.CompositionWorkspace,
+    ),
+  { loading: workspaceLoading },
+);
+const DemoWorkspace = dynamic(
+  () => import("@/components/workspace/demo-workspace").then((module) => module.DemoWorkspace),
+  { loading: workspaceLoading },
+);
+const RevisionWorkspace = dynamic(
+  () =>
+    import("@/components/workspace/revision-workspace").then(
+      (module) => module.RevisionWorkspace,
+    ),
+  { loading: workspaceLoading },
+);
+
 const apiBaseUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 
 export default function ProjectWorkspaceClient() {
@@ -172,7 +192,7 @@ export default function ProjectWorkspaceClient() {
   const [audioUploadNotes, setAudioUploadNotes] = useState("");
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [projectDescriptionDraft, setProjectDescriptionDraft] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const pendingActions = usePendingActions();
 
   const sortedVersions = useMemo(() => sortSongSpecVersions(versions), [versions]);
   const sortedLyrics = useMemo(() => sortLyricsVersions(lyricsVersions), [lyricsVersions]);
@@ -266,7 +286,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("songSpec");
     setError(null);
     try {
       const intake = await fetchJson<IdeaIntake>(intakeEndpoint(apiBaseUrl, projectId), "Idea intake", {
@@ -280,7 +300,7 @@ export default function ProjectWorkspaceClient() {
     } catch (submitError) {
       setError(errorMessage(submitError, "Failed to save intake"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("songSpec");
     }
   }
 
@@ -289,7 +309,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Create an idea intake before generating a SongSpec."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("songSpec");
     setError(null);
     try {
       const generated = await fetchJson<SongSpecVersion>(
@@ -306,7 +326,7 @@ export default function ProjectWorkspaceClient() {
     } catch (generateError) {
       setError(errorMessage(generateError, "Failed to generate SongSpec"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("songSpec");
     }
   }
 
@@ -320,7 +340,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(payload.message));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("songSpec");
     setError(null);
     try {
       const edited = await fetchJson<SongSpecVersion>(
@@ -337,7 +357,7 @@ export default function ProjectWorkspaceClient() {
     } catch (editError) {
       setError(errorMessage(editError, "Failed to edit SongSpec"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("songSpec");
     }
   }
 
@@ -345,7 +365,7 @@ export default function ProjectWorkspaceClient() {
     if (!activeVersion) {
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("songSpec");
     setError(null);
     try {
       await fetchJson<SongSpecVersion>(
@@ -357,7 +377,7 @@ export default function ProjectWorkspaceClient() {
     } catch (approveError) {
       setError(errorMessage(approveError, "Failed to approve SongSpec"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("songSpec");
     }
   }
 
@@ -366,7 +386,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before generating lyrics."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("composition");
     setError(null);
     try {
       const generated = await fetchJson<LyricsVersion>(
@@ -383,7 +403,7 @@ export default function ProjectWorkspaceClient() {
     } catch (lyricsError) {
       setError(errorMessage(lyricsError, "Failed to generate lyrics"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("composition");
     }
   }
 
@@ -397,7 +417,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("composition");
     setError(null);
     try {
       const edited = await fetchJson<LyricsVersion>(
@@ -417,7 +437,7 @@ export default function ProjectWorkspaceClient() {
     } catch (lyricsError) {
       setError(errorMessage(lyricsError, "Failed to edit lyrics"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("composition");
     }
   }
 
@@ -426,7 +446,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before generating chords."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("composition");
     setError(null);
     try {
       const generated = await fetchJson<ChordProgressionVersion>(
@@ -446,7 +466,7 @@ export default function ProjectWorkspaceClient() {
     } catch (chordsError) {
       setError(errorMessage(chordsError, "Failed to generate chords"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("composition");
     }
   }
 
@@ -460,7 +480,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("composition");
     setError(null);
     try {
       const edited = await fetchJson<ChordProgressionVersion>(
@@ -477,7 +497,7 @@ export default function ProjectWorkspaceClient() {
     } catch (chordsError) {
       setError(errorMessage(chordsError, "Failed to edit chords"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("composition");
     }
   }
 
@@ -486,7 +506,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before generating MIDI."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("composition");
     setError(null);
     try {
       const generated = await fetchJson<MidiAssetVersion[]>(
@@ -507,7 +527,7 @@ export default function ProjectWorkspaceClient() {
     } catch (midiError) {
       setError(errorMessage(midiError, "Failed to generate MIDI"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("composition");
     }
   }
 
@@ -521,7 +541,7 @@ export default function ProjectWorkspaceClient() {
     if (!audioUploadFile) {
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("audio");
     setError(null);
     try {
       const formData = new FormData();
@@ -541,7 +561,7 @@ export default function ProjectWorkspaceClient() {
     } catch (uploadError) {
       setError(errorMessage(uploadError, "Failed to upload audio"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("audio");
     }
   }
 
@@ -557,7 +577,7 @@ export default function ProjectWorkspaceClient() {
       }
     }
 
-    setIsSaving(true);
+    pendingActions.begin("audio");
     setError(null);
     try {
       const updatedUpload = await fetchJson<AudioUpload>(
@@ -578,7 +598,7 @@ export default function ProjectWorkspaceClient() {
     } catch (updateError) {
       setError(errorMessage(updateError, "Failed to update audio"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("audio");
     }
   }
 
@@ -587,7 +607,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before extracting melody MIDI."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("audio");
     setError(null);
     try {
       const run = await fetchJson<GenerationRun>(
@@ -604,7 +624,7 @@ export default function ProjectWorkspaceClient() {
     } catch (extractError) {
       setError(errorMessage(extractError, "Failed to extract melody MIDI"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("audio");
     }
   }
 
@@ -613,7 +633,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before generating an arrangement."));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("delivery");
     setError(null);
     try {
       await fetchJson<unknown>(
@@ -629,7 +649,7 @@ export default function ProjectWorkspaceClient() {
     } catch (arrangementError) {
       setError(errorMessage(arrangementError, "Failed to generate arrangement"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("delivery");
     }
   }
 
@@ -643,7 +663,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("delivery");
     setError(null);
     try {
       await fetchJson<unknown>(
@@ -659,12 +679,12 @@ export default function ProjectWorkspaceClient() {
     } catch (arrangementError) {
       setError(errorMessage(arrangementError, "Failed to edit arrangement"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("delivery");
     }
   }
 
   async function handleCreateExport() {
-    setIsSaving(true);
+    pendingActions.begin("delivery");
     setError(null);
     try {
       await fetchJson<unknown>(exportsEndpoint(apiBaseUrl, projectId), "Project export", {
@@ -676,12 +696,12 @@ export default function ProjectWorkspaceClient() {
     } catch (exportError) {
       setError(errorMessage(exportError, "Failed to export project"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("delivery");
     }
   }
 
   async function handleGenerateDemo() {
-    setIsSaving(true);
+    pendingActions.begin("demo");
     setError(null);
     try {
       const run = await fetchJson<GenerationRun>(
@@ -698,12 +718,12 @@ export default function ProjectWorkspaceClient() {
     } catch (demoError) {
       setError(errorMessage(demoError, "Failed to generate demo"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("demo");
     }
   }
 
   async function handleRetryRun(runId: string) {
-    setIsSaving(true);
+    pendingActions.begin("tasks");
     setError(null);
     try {
       const run = await fetchJson<GenerationRun>(
@@ -716,12 +736,12 @@ export default function ProjectWorkspaceClient() {
     } catch (retryError) {
       setError(errorMessage(retryError, "Failed to retry demo"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("tasks");
     }
   }
 
   async function handleCancelRun(runId: string) {
-    setIsSaving(true);
+    pendingActions.begin("tasks");
     setError(null);
     try {
       const run = await fetchJson<GenerationRun>(
@@ -736,7 +756,7 @@ export default function ProjectWorkspaceClient() {
     } catch (cancelError) {
       setError(errorMessage(cancelError, "Failed to cancel task"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("tasks");
     }
   }
 
@@ -747,7 +767,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("revision");
     setError(null);
     try {
       const revision = await fetchJson<RevisionRequest>(
@@ -765,12 +785,12 @@ export default function ProjectWorkspaceClient() {
     } catch (revisionError) {
       setError(errorMessage(revisionError, "Failed to plan revision"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("revision");
     }
   }
 
   async function handleApplyRevision(revisionId: string, regenerateDemo: boolean) {
-    setIsSaving(true);
+    pendingActions.begin("revision");
     setError(null);
     try {
       const result = await fetchJson<RevisionApplyResponse>(
@@ -789,12 +809,12 @@ export default function ProjectWorkspaceClient() {
     } catch (applyError) {
       setError(errorMessage(applyError, "Failed to apply revision"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("revision");
     }
   }
 
   async function handleRejectRevision(revisionId: string) {
-    setIsSaving(true);
+    pendingActions.begin("revision");
     setError(null);
     try {
       const revision = await fetchJson<RevisionRequest>(
@@ -809,7 +829,7 @@ export default function ProjectWorkspaceClient() {
     } catch (rejectError) {
       setError(errorMessage(rejectError, "Failed to reject revision"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("revision");
     }
   }
 
@@ -820,7 +840,7 @@ export default function ProjectWorkspaceClient() {
       setError(text(validationError));
       return;
     }
-    setIsSaving(true);
+    pendingActions.begin("collaboration");
     setError(null);
     try {
       const target = parseCommentTarget(commentTargetValue);
@@ -844,12 +864,12 @@ export default function ProjectWorkspaceClient() {
     } catch (commentError) {
       setError(errorMessage(commentError, "Failed to create comment"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("collaboration");
     }
   }
 
   async function handleUpdateComment(commentId: string, status: ProjectComment["status"]) {
-    setIsSaving(true);
+    pendingActions.begin("collaboration");
     setError(null);
     try {
       const comment = await fetchJson<ProjectComment>(
@@ -868,7 +888,7 @@ export default function ProjectWorkspaceClient() {
     } catch (commentError) {
       setError(errorMessage(commentError, "Failed to update comment"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("collaboration");
     }
   }
 
@@ -877,7 +897,7 @@ export default function ProjectWorkspaceClient() {
     leftId: string,
     rightId: string,
   ) {
-    setIsSaving(true);
+    pendingActions.begin("revision");
     setError(null);
     try {
       const diff = await fetchJson<VersionDiff>(
@@ -888,12 +908,12 @@ export default function ProjectWorkspaceClient() {
     } catch (diffError) {
       setError(errorMessage(diffError, "Failed to compare versions"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("revision");
     }
   }
 
   async function handleRestoreVersion(assetType: RestoreAssetType, versionId: string) {
-    setIsSaving(true);
+    pendingActions.begin("revision");
     setError(null);
     try {
       await fetchJson<unknown>(versionRestoreEndpoint(apiBaseUrl, projectId), "Version restore", {
@@ -905,7 +925,7 @@ export default function ProjectWorkspaceClient() {
     } catch (restoreError) {
       setError(errorMessage(restoreError, "Failed to restore version"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("revision");
     }
   }
 
@@ -922,7 +942,7 @@ export default function ProjectWorkspaceClient() {
       return;
     }
 
-    setIsSaving(true);
+    pendingActions.begin("project");
     setError(null);
     try {
       const updatedProject = await fetchJson<Project>(
@@ -941,7 +961,7 @@ export default function ProjectWorkspaceClient() {
     } catch (updateError) {
       setError(errorMessage(updateError, "Failed to update project"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("project");
     }
   }
 
@@ -950,7 +970,7 @@ export default function ProjectWorkspaceClient() {
       return;
     }
 
-    setIsSaving(true);
+    pendingActions.begin("project");
     setError(null);
     try {
       const updatedProject = await fetchJson<Project>(
@@ -966,7 +986,7 @@ export default function ProjectWorkspaceClient() {
     } catch (statusError) {
       setError(errorMessage(statusError, "Failed to update project status"));
     } finally {
-      setIsSaving(false);
+      pendingActions.end("project");
     }
   }
 
@@ -977,7 +997,7 @@ export default function ProjectWorkspaceClient() {
         error={error}
         handoff={projectHandoff}
         isLoading={isLoading}
-        isSaving={isSaving}
+        isSaving={pendingActions.isPending("project")}
         name={projectNameDraft}
         onDescriptionChange={setProjectDescriptionDraft}
         onNameChange={setProjectNameDraft}
@@ -993,7 +1013,7 @@ export default function ProjectWorkspaceClient() {
         answers={answers}
         draftForm={draftForm}
         idea={idea}
-        isSaving={isSaving}
+        isSaving={pendingActions.isPending("songSpec")}
         latestIntake={latestIntake}
         onAnswersChange={setAnswers}
         onApprove={handleApprove}
@@ -1009,7 +1029,7 @@ export default function ProjectWorkspaceClient() {
         <AudioWorkspace
           approvedSongSpecId={approvedVersion?.id ?? null}
           file={audioUploadFile}
-          isSaving={isSaving}
+          isSaving={pendingActions.isPending("audio", "tasks")}
           kind={audioUploadKind}
           notes={audioUploadNotes}
           onCancel={handleCancelRun}
@@ -1029,7 +1049,7 @@ export default function ProjectWorkspaceClient() {
           canGenerate={canGenerateAssets}
           chordDraft={chordDraft}
           hookDraft={hookDraft}
-          isSaving={isSaving}
+          isSaving={pendingActions.isPending("composition")}
           lyricDraft={lyricDraft}
           midiAssets={sortedMidiAssets}
           onChordBarsChange={(index, bars) => {
@@ -1075,7 +1095,7 @@ export default function ProjectWorkspaceClient() {
           canExport={canExportProject}
           canGenerateArrangement={canGenerateArrangementPlan}
           exports={sortedExports}
-          isSaving={isSaving}
+          isSaving={pendingActions.isPending("delivery")}
           onArrangementChange={setArrangementDraft}
           onArrangementSubmit={handleArrangementSubmit}
           onCreateExport={handleCreateExport}
@@ -1085,7 +1105,7 @@ export default function ProjectWorkspaceClient() {
           assetTree={assetTree}
           canGenerate={canGenerateDemoVersion}
           demos={sortedDemos}
-          isSaving={isSaving}
+          isSaving={pendingActions.isPending("demo", "tasks")}
           onGenerate={handleGenerateDemo}
           onCancel={handleCancelRun}
           onRetry={handleRetryRun}
@@ -1098,7 +1118,7 @@ export default function ProjectWorkspaceClient() {
         arrangements={sortedArrangements}
         demos={sortedDemos}
         feedback={revisionFeedback}
-        isSaving={isSaving}
+        isSaving={pendingActions.isPending("revision")}
         lyrics={sortedLyrics}
         melodyAssets={melodyAssets}
         onApply={handleApplyRevision}
@@ -1116,7 +1136,7 @@ export default function ProjectWorkspaceClient() {
         body={commentBody}
         comments={sortedComments}
         events={sortedProjectEvents}
-        isSaving={isSaving}
+        isSaving={pendingActions.isPending("collaboration")}
         onAuthorChange={setCommentAuthor}
         onBodyChange={setCommentBody}
         onSubmit={handleCreateComment}

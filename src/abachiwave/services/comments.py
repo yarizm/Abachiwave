@@ -66,6 +66,9 @@ async def list_project_comments(
     session: AsyncSession,
     project_id: UUID,
     status: ProjectCommentStatus | None = None,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[ProjectComment]:
     statement: Select[tuple[ProjectComment]] = (
         select(ProjectComment)
@@ -74,6 +77,7 @@ async def list_project_comments(
     )
     if status is not None:
         statement = statement.where(ProjectComment.status == status)
+    statement = statement.limit(limit).offset(offset)
     result = await session.execute(statement)
     return list(result.scalars().all())
 

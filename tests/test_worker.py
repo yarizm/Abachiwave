@@ -11,6 +11,7 @@ from abachiwave.models.demo import (
 )
 from abachiwave.models.project import Project
 from abachiwave.services.generation_runs import TASK_TIMEOUT_ERROR, run_generation_with_timeout
+from abachiwave.services.task_queue import ArqTaskQueue
 from abachiwave.worker import build_redis_settings, health_check, load_generation_log_context
 
 
@@ -27,6 +28,48 @@ def test_build_redis_settings_from_url() -> None:
     assert settings.database == 2
     assert settings.username == "user"
     assert settings.password == "pass"
+
+
+@pytest.mark.asyncio
+async def test_task_queue_reuses_pool_until_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeJob:
+        job_id = "job-1"
+
+    class FakePool:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.closed = False
+
+        async def enqueue_job(self, function: str, run_id: str) -> FakeJob:
+            self.calls.append((function, run_id))
+            return FakeJob()
+
+        async def close(self) -> None:
+            self.closed = True
+
+    pool = FakePool()
+    create_calls = 0
+
+    async def fake_create_pool(_settings: object) -> FakePool:
+        nonlocal create_calls
+        create_calls += 1
+        return pool
+
+    monkeypatch.setattr("abachiwave.services.task_queue.create_pool", fake_create_pool)
+    queue = ArqTaskQueue("redis://localhost:6379/0")
+    first_run = uuid4()
+    second_run = uuid4()
+
+    assert await queue.enqueue_demo_generation(first_run) == "job-1"
+    assert await queue.enqueue_audio_to_midi(second_run) == "job-1"
+    await queue.close()
+
+    assert create_calls == 1
+    assert pool.calls == [
+        ("generate_demo_job", str(first_run)),
+        ("extract_midi_from_audio_job", str(second_run)),
+    ]
+    assert pool.closed is True
 
 
 @pytest.mark.asyncio

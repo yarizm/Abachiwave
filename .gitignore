@@ -47,3 +47,12 @@ web/playwright-report/
 web/blob-report/
 output/
 *.tsbuildinfo
+
+# Local planning and operations documents
+.github/pull_request_template.md
+README.en.md
+*_development_plan.md
+milestone_*_development_plan.md
+docs/*
+!docs/api.md
+!docs/architecture.md

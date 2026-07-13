@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -22,6 +22,9 @@ class AudioUploadStatus(StrEnum):
 
 class AudioUpload(Base):
     __tablename__ = "audio_uploads"
+    __table_args__ = (
+        Index("ix_audio_uploads_project_created", "project_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(

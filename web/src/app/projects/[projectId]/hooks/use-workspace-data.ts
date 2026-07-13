@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useGenerationRunPolling } from "./use-generation-run-polling";
+
 import { useLocale } from "@/i18n/locale-provider";
 import {
   ArrangementPlanVersion,
@@ -18,7 +20,6 @@ import {
   ProjectHandoff,
   ProjectReview,
   RevisionRequest,
-  isRunActive,
 } from "@/lib/composition";
 import { Project } from "@/lib/projects";
 import { IdeaIntake, SongSpecVersion } from "@/lib/song-specs";
@@ -79,15 +80,19 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
     void loadWorkspace();
   }, [loadWorkspace]);
 
-  useEffect(() => {
-    if (!generationRuns.some(isRunActive)) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      void loadWorkspace();
-    }, 2500);
-    return () => window.clearInterval(intervalId);
-  }, [generationRuns, loadWorkspace]);
+  const handlePollingError = useCallback(
+    (pollError: unknown) => {
+      setError(errorMessage(pollError, "Failed to refresh task status"));
+    },
+    [errorMessage],
+  );
+  useGenerationRunPolling({
+    apiBaseUrl,
+    runs: generationRuns,
+    setRuns: setGenerationRuns,
+    onTerminal: loadWorkspace,
+    onError: handlePollingError,
+  });
 
   return {
     project,

@@ -24,7 +24,9 @@ flowchart LR
 
 - Next.js App Router + React + TypeScript。
 - `useWorkspaceData` 在进入项目时通过单个 `Promise.all` 并行加载 17 组独立资源。
+- 进入页面后的任务更新只轮询 active run 对应的 `/api/v1/tasks/{id}`；任务进入终态后再做一次完整刷新，避免固定周期重复加载整个工作台。
 - `components/workspace` 按 Project Overview、SongSpec、Composition、Delivery、Demo、Revision、Audio、Collaboration 拆分。
+- Audio、Composition、Demo 和 Revision 面板通过 `next/dynamic` 延迟加载；写操作按业务域维护 pending 状态，互不阻塞无关面板。
 - API URL、排序、校验和状态判断位于 `web/src/lib`。
 - 下载按钮通过 `fetch -> Blob -> object URL` 保存跨源 API 文件，播放器继续直接使用流式 URL。
 
@@ -34,6 +36,8 @@ flowchart LR
 - Pydantic v2 schema 负责输入和输出契约。
 - SQLAlchemy 2.x AsyncSession 管理事务，Alembic 管理 additive migration。
 - Request context middleware 接受或生成 `X-Request-ID`，结构化日志绑定请求、项目和任务标识。
+- 列表接口统一使用有上限的 `limit/offset`，常用项目历史查询带复合索引。
+- CORS 使用明确的来源、方法和请求头白名单，响应包含 CSP、frame、MIME sniffing 和 referrer 安全头。
 - `/health/live` 检查进程；`/health/ready` 检查 PostgreSQL、Redis 和 MinIO。
 
 ### Worker
@@ -53,7 +57,7 @@ flowchart LR
 
 ### Redis
 
-只承担 Arq 队列和 Worker 通信。业务事实、任务终态和生成结果均以 PostgreSQL 为准。
+只承担 Arq 队列和 Worker 通信。API 进程复用一个延迟创建的 Arq Redis pool，关闭时由 FastAPI lifespan 统一释放。业务事实、任务终态和生成结果均以 PostgreSQL 为准。
 
 ## 3. 资产与版本模型
 
@@ -121,8 +125,10 @@ sequenceDiagram
 - 上传和 Worker 生成采用“先写对象，再提交 ready 元数据”。
 - 数据库提交失败时，调用 `delete_bytes` 尽力删除已写对象。
 - 下载时同时校验项目归属和元数据，避免跨项目访问。
+- 上传、下载和 ZIP 归档按块传输；ZIP 使用可落盘的临时缓冲并受 `MAX_EXPORT_BUNDLE_BYTES` 限制，避免大文件链路常驻内存。
 - `checksum` 和 `size_bytes` 用于导出与排障，不替代对象存储自身完整性机制。
 - `MAX_PROJECT_UPLOADS` 和 25 MB 单文件上限控制本地素材增长。
+- `scripts/audit_storage.py` 对比数据库 storage key 与 MinIO inventory；默认只读，显式指定 `--delete-orphans` 才删除孤立对象。
 
 ## 7. 可观测性
 

@@ -2,7 +2,17 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -255,6 +265,9 @@ class ArrangementPlanVersion(Base):
 
 class ExportBundle(Base):
     __tablename__ = "export_bundles"
+    __table_args__ = (
+        Index("ix_export_bundles_project_created", "project_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(

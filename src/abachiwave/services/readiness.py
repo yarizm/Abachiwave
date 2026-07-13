@@ -6,13 +6,12 @@ from typing import Any, Protocol
 
 import boto3
 import structlog
-from arq import create_pool
 from sqlalchemy import text
 
 from abachiwave.core.config import Settings, get_settings
 from abachiwave.core.database import engine
 from abachiwave.schemas.health import DependencyReadiness, DependencyState
-from abachiwave.services.task_queue import build_redis_settings
+from abachiwave.services.task_queue import get_arq_task_queue
 
 DependencyCheck = Callable[[], Awaitable[None]]
 
@@ -54,11 +53,7 @@ class SystemReadinessService:
             await connection.execute(text("SELECT 1"))
 
     async def _check_redis(self) -> None:
-        pool = await create_pool(build_redis_settings(self._settings.redis_url))
-        try:
-            await pool.ping()
-        finally:
-            await pool.close()
+        await get_arq_task_queue().ping()
 
     async def _check_storage(self) -> None:
         await asyncio.to_thread(self._head_bucket)

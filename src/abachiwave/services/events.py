@@ -33,12 +33,14 @@ async def list_project_events(
     *,
     project_id: UUID,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[ProjectEvent]:
     statement: Select[tuple[ProjectEvent]] = (
         select(ProjectEvent)
         .where(ProjectEvent.project_id == str(project_id))
         .order_by(ProjectEvent.created_at.desc(), ProjectEvent.id.desc())
         .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())

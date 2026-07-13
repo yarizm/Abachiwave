@@ -1,5 +1,3 @@
-from collections.abc import AsyncIterator
-from io import BytesIO
 from typing import Annotated
 from uuid import UUID
 
@@ -7,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.models.song_spec import SongSpecStatus, SongSpecVersion
 from abachiwave.schemas.composition import (
@@ -56,7 +55,7 @@ from abachiwave.services.delivery import (
     validate_export_download_token,
 )
 from abachiwave.services.song_specs import get_song_spec_version, project_exists
-from abachiwave.services.storage import ObjectStorage, get_object_storage
+from abachiwave.services.storage import ObjectStorage, get_object_storage, iter_storage_bytes
 
 router = APIRouter()
 export_router = APIRouter()
@@ -83,10 +82,16 @@ async def generate_lyrics_endpoint(
 async def list_lyrics_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[LyricsVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    versions = await list_lyrics_versions(session, project_id)
+    versions = await list_lyrics_versions(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [lyrics_version_to_read(version) for version in versions]
 
 
@@ -135,10 +140,16 @@ async def generate_chords_endpoint(
 async def list_chords_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[ChordProgressionVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    versions = await list_chord_progression_versions(session, project_id)
+    versions = await list_chord_progression_versions(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [chord_progression_to_read(version) for version in versions]
 
 
@@ -209,10 +220,16 @@ async def generate_midi_endpoint(
 async def list_midi_assets_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[MidiAssetVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    versions = await list_midi_asset_versions(session, project_id)
+    versions = await list_midi_asset_versions(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [midi_asset_to_read(version) for version in versions]
 
 
@@ -230,16 +247,19 @@ async def download_midi_asset_endpoint(
             detail="MidiAssetVersion not found",
         )
     try:
-        data = storage.get_bytes(version.storage_key)
+        data = iter_storage_bytes(storage, version.storage_key)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="MIDI asset file not found",
         ) from exc
     return StreamingResponse(
-        _byte_stream(data),
+        data,
         media_type=version.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{version.filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{version.filename}"',
+            "Content-Length": str(version.size_bytes),
+        },
     )
 
 
@@ -257,11 +277,6 @@ async def _get_approved_song_spec_or_raise(
             detail="SongSpec must be approved before composition generation",
         )
     return song_spec
-
-
-async def _byte_stream(data: bytes) -> AsyncIterator[bytes]:
-    buffer = BytesIO(data)
-    yield buffer.read()
 
 
 @router.post(
@@ -298,10 +313,16 @@ async def generate_arrangement_endpoint(
 async def list_arrangements_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[ArrangementPlanVersionRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    versions = await list_arrangement_plan_versions(session, project_id)
+    versions = await list_arrangement_plan_versions(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [arrangement_plan_to_read(version) for version in versions]
 
 
@@ -365,10 +386,16 @@ async def create_export_endpoint(
 async def list_exports_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[ExportBundleRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    bundles = await list_export_bundles(session, project_id)
+    bundles = await list_export_bundles(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [export_bundle_to_read(bundle) for bundle in bundles]
 
 
@@ -399,14 +426,17 @@ async def download_export_endpoint(
     if not bundle.storage_key or not bundle.filename:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export file not found")
     try:
-        data = storage.get_bytes(bundle.storage_key)
+        data = iter_storage_bytes(storage, bundle.storage_key)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Export file not found",
         ) from exc
     return StreamingResponse(
-        _byte_stream(data),
+        data,
         media_type=bundle.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{bundle.filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{bundle.filename}"',
+            "Content-Length": str(bundle.size_bytes or 0),
+        },
     )

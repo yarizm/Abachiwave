@@ -129,11 +129,19 @@ async def create_audio_upload(
         raise
 
 
-async def list_audio_uploads(session: AsyncSession, project_id: UUID) -> list[AudioUpload]:
+async def list_audio_uploads(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AudioUpload]:
     statement: Select[tuple[AudioUpload]] = (
         select(AudioUpload)
         .where(AudioUpload.project_id == str(project_id))
         .order_by(AudioUpload.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())

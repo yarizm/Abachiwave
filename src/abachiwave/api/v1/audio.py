@@ -1,5 +1,3 @@
-from collections.abc import AsyncIterator
-from io import BytesIO
 from typing import Annotated
 from uuid import UUID
 
@@ -7,10 +5,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.models.audio import AudioUploadKind
 from abachiwave.schemas.audio import AudioExtractMidiRequest, AudioUploadRead, AudioUploadUpdate
 from abachiwave.schemas.demo import GenerationRunRead
+from abachiwave.services import audio as audio_service
 from abachiwave.services.audio import (
     AudioUploadLimitError,
     AudioUploadTooLargeError,
@@ -24,7 +24,7 @@ from abachiwave.services.audio import (
 )
 from abachiwave.services.demo import generation_run_to_read
 from abachiwave.services.song_specs import project_exists
-from abachiwave.services.storage import ObjectStorage, get_object_storage
+from abachiwave.services.storage import ObjectStorage, get_object_storage, iter_storage_bytes
 from abachiwave.services.task_queue import (
     AudioToMidiTaskQueue,
     get_audio_to_midi_task_queue,
@@ -49,8 +49,8 @@ async def create_audio_upload_endpoint(
     kind: Annotated[AudioUploadKind, Form()],
     notes: Annotated[str | None, Form()] = None,
 ) -> AudioUploadRead:
-    data = await file.read()
     try:
+        data = await _read_limited_upload(file)
         upload = await create_audio_upload(
             session=session,
             project_id=project_id,
@@ -85,10 +85,16 @@ async def create_audio_upload_endpoint(
 async def list_audio_uploads_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[AudioUploadRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    uploads = await list_audio_uploads(session, project_id)
+    uploads = await list_audio_uploads(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [audio_upload_to_read(upload) for upload in uploads]
 
 
@@ -128,16 +134,19 @@ async def download_audio_upload_endpoint(
     if upload is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AudioUpload not found")
     try:
-        data = storage.get_bytes(upload.storage_key)
+        data = iter_storage_bytes(storage, upload.storage_key)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Audio file not found",
         ) from exc
     return StreamingResponse(
-        _byte_stream(data),
+        data,
         media_type=upload.content_type,
-        headers={"Content-Disposition": f'inline; filename="{upload.filename}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{upload.filename}"',
+            "Content-Length": str(upload.size_bytes),
+        },
     )
 
 
@@ -170,6 +179,12 @@ async def extract_audio_midi_endpoint(
     return await generation_run_to_read(session, result.run)
 
 
-async def _byte_stream(data: bytes) -> AsyncIterator[bytes]:
-    buffer = BytesIO(data)
-    yield buffer.read()
+async def _read_limited_upload(file: UploadFile) -> bytes:
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := await file.read(1024 * 1024):
+        size += len(chunk)
+        if size > audio_service.MAX_AUDIO_UPLOAD_BYTES:
+            raise AudioUploadTooLargeError("Audio upload exceeds 25 MB")
+        chunks.append(chunk)
+    return b"".join(chunks)

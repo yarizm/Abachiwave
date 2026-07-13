@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.models.comment import ProjectCommentStatus
 from abachiwave.schemas.comments import (
@@ -43,11 +44,18 @@ async def create_project_comment_endpoint(
 async def list_project_comments_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
     status_filter: Annotated[ProjectCommentStatus | None, Query(alias="status")] = None,
 ) -> list[ProjectCommentRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    comments = await list_project_comments(session, project_id, status_filter)
+    comments = await list_project_comments(
+        session,
+        project_id,
+        status_filter,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [comment_to_read(comment) for comment in comments]
 
 

@@ -122,6 +122,10 @@ textarea {
   gap: 24px;
 }
 
+.workspace-panel-loading {
+  min-height: 240px;
+}
+
 .workspace-header {
   display: flex;
   align-items: flex-start;

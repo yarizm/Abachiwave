@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from functools import partial
 from hashlib import sha256
 from io import BytesIO
-from typing import cast
 from uuid import UUID, uuid4
 
 from mido import MidiFile
@@ -16,7 +15,6 @@ from abachiwave.models.composition import (
     MidiAssetKind,
     MidiAssetVersion,
 )
-from abachiwave.models.demo import AudioDemoVersion
 from abachiwave.models.project import Project
 from abachiwave.models.revision import (
     RevisionRequest,
@@ -31,10 +29,7 @@ from abachiwave.schemas.revisions import (
     RestoreAssetType,
     RevisionRequestRead,
     RevisionTask,
-    VersionAssetType,
-    VersionDiffChange,
     VersionDiffRead,
-    VersionEndpointReference,
     VersionReference,
     VersionRestoreRead,
 )
@@ -53,6 +48,12 @@ from abachiwave.services.delivery import (
 )
 from abachiwave.services.demo import get_demo_version
 from abachiwave.services.events import add_project_event
+from abachiwave.services.revision_diff import (
+    build_arrangement_diff,
+    build_demo_diff,
+    build_lyrics_diff,
+    build_midi_diff,
+)
 from abachiwave.services.storage import ObjectStorage
 from abachiwave.services.versioning import create_version_with_retry
 
@@ -94,11 +95,19 @@ async def create_revision_request(
     return revision
 
 
-async def list_revision_requests(session: AsyncSession, project_id: UUID) -> list[RevisionRequest]:
+async def list_revision_requests(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[RevisionRequest]:
     statement: Select[tuple[RevisionRequest]] = (
         select(RevisionRequest)
         .where(RevisionRequest.project_id == str(project_id))
         .order_by(RevisionRequest.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -204,7 +213,7 @@ async def build_version_diff(
         right_lyrics = await get_lyrics_version(session, project_id, right_id)
         if left_lyrics is None or right_lyrics is None:
             return None, "LyricsVersion not found"
-        return _lyrics_diff(left_lyrics, right_lyrics), None
+        return build_lyrics_diff(left_lyrics, right_lyrics), None
     if asset_type == "midi_melody":
         left_midi = await get_midi_asset_version(session, project_id, left_id)
         right_midi = await get_midi_asset_version(session, project_id, right_id)
@@ -215,19 +224,19 @@ async def build_version_diff(
             or right_midi.kind != MidiAssetKind.melody
         ):
             return None, "MidiAssetVersion not found"
-        return _midi_diff(left_midi, right_midi), None
+        return build_midi_diff(left_midi, right_midi), None
     if asset_type == "arrangement":
         left_arrangement = await _get_arrangement(session, project_id, left_id)
         right_arrangement = await _get_arrangement(session, project_id, right_id)
         if left_arrangement is None or right_arrangement is None:
             return None, "ArrangementPlanVersion not found"
-        return _arrangement_diff(left_arrangement, right_arrangement), None
+        return build_arrangement_diff(left_arrangement, right_arrangement), None
     if asset_type == "demo":
         left_demo = await get_demo_version(session, project_id, left_id)
         right_demo = await get_demo_version(session, project_id, right_id)
         if left_demo is None or right_demo is None:
             return None, "AudioDemoVersion not found"
-        return _demo_diff(left_demo, right_demo), None
+        return build_demo_diff(left_demo, right_demo), None
     return None, "Unsupported asset_type"
 
 
@@ -805,140 +814,3 @@ def _target_section_id(feedback: str) -> str | None:
         if token in normalized or token in feedback:
             return section_id
     return None
-
-
-def _lyrics_diff(left: LyricsVersion, right: LyricsVersion) -> VersionDiffRead:
-    left_sections = {section["section_id"]: section for section in left.sections}
-    right_sections = {section["section_id"]: section for section in right.sections}
-    changes: list[VersionDiffChange] = []
-    for section_id in sorted(set(left_sections) | set(right_sections)):
-        left_text = str(left_sections.get(section_id, {}).get("text", ""))
-        right_text = str(right_sections.get(section_id, {}).get("text", ""))
-        if left_text != right_text:
-            changes.append(
-                VersionDiffChange(
-                    field=f"sections.{section_id}.text",
-                    label=f"{section_id} lyrics",
-                    left=left_text,
-                    right=right_text,
-                    summary="Lyric text changed.",
-                )
-            )
-    return _diff("lyrics", left, right, changes)
-
-
-def _midi_diff(left: MidiAssetVersion, right: MidiAssetVersion) -> VersionDiffRead:
-    changes = [
-        VersionDiffChange(
-            field="checksum",
-            label="MIDI checksum",
-            left=left.checksum,
-            right=right.checksum,
-            summary=(
-                "MIDI file content changed."
-                if left.checksum != right.checksum
-                else "MIDI file content is unchanged."
-            ),
-        )
-    ]
-    if left.size_bytes != right.size_bytes:
-        changes.append(
-            VersionDiffChange(
-                field="size_bytes",
-                label="File size",
-                left=str(left.size_bytes),
-                right=str(right.size_bytes),
-                summary="MIDI file size changed.",
-            )
-        )
-    return _diff("midi_melody", left, right, changes)
-
-
-def _arrangement_diff(
-    left: ArrangementPlanVersion,
-    right: ArrangementPlanVersion,
-) -> VersionDiffRead:
-    changes: list[VersionDiffChange] = []
-    for field in ("overview", "mix_notes", "reference_notes"):
-        left_value = str(getattr(left, field))
-        right_value = str(getattr(right, field))
-        if left_value != right_value:
-            changes.append(
-                VersionDiffChange(
-                    field=field,
-                    label=field.replace("_", " "),
-                    left=left_value,
-                    right=right_value,
-                    summary="Arrangement text changed.",
-                )
-            )
-    if left.sections != right.sections:
-        changes.append(
-            VersionDiffChange(
-                field="sections",
-                label="Arrangement sections",
-                left=str(left.sections),
-                right=str(right.sections),
-                summary="Arrangement section details changed.",
-            )
-        )
-    return _diff("arrangement", left, right, changes)
-
-
-def _demo_diff(left: AudioDemoVersion, right: AudioDemoVersion) -> VersionDiffRead:
-    changes = [
-        VersionDiffChange(
-            field="checksum",
-            label="Audio checksum",
-            left=left.checksum,
-            right=right.checksum,
-            summary=(
-                "Demo audio content changed."
-                if left.checksum != right.checksum
-                else "Demo audio content is unchanged."
-            ),
-        ),
-        VersionDiffChange(
-            field="duration_seconds",
-            label="Duration",
-            left=str(left.duration_seconds),
-            right=str(right.duration_seconds),
-            summary="Demo duration comparison.",
-        ),
-    ]
-    return _diff("demo", left, right, changes)
-
-
-def _diff(
-    asset_type: str,
-    left: LyricsVersion | MidiAssetVersion | ArrangementPlanVersion | AudioDemoVersion,
-    right: LyricsVersion | MidiAssetVersion | ArrangementPlanVersion | AudioDemoVersion,
-    changes: list[VersionDiffChange],
-) -> VersionDiffRead:
-    return VersionDiffRead(
-        asset_type=cast(VersionAssetType, asset_type),
-        left=_endpoint_ref(left),
-        right=_endpoint_ref(right),
-        summary=f"{len(changes)} changes detected." if changes else "No changes detected.",
-        changes=changes,
-    )
-
-
-def _endpoint_ref(
-    version: LyricsVersion | MidiAssetVersion | ArrangementPlanVersion | AudioDemoVersion,
-) -> VersionEndpointReference:
-    label = f"v{version.version_number}"
-    if isinstance(version, LyricsVersion):
-        label = f"Lyrics v{version.version_number}"
-    elif isinstance(version, MidiAssetVersion):
-        label = f"{MidiAssetKind(version.kind).value.title()} MIDI v{version.version_number}"
-    elif isinstance(version, ArrangementPlanVersion):
-        label = f"Arrangement v{version.version_number}"
-    elif isinstance(version, AudioDemoVersion):
-        label = f"Demo v{version.version_number}"
-    return VersionEndpointReference(
-        id=UUID(version.id),
-        label=label,
-        version_number=version.version_number,
-        created_at=version.created_at,
-    )

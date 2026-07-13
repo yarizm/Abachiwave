@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.schemas.demo import GenerationRunRead
 from abachiwave.schemas.revisions import (
@@ -59,10 +60,16 @@ async def create_revision_endpoint(
 async def list_revisions_endpoint(
     project_id: UUID,
     session: SessionDependency,
+    page: PageDependency,
 ) -> list[RevisionRequestRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    revisions = await list_revision_requests(session, project_id)
+    revisions = await list_revision_requests(
+        session,
+        project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [revision_request_to_read(revision) for revision in revisions]
 
 
@@ -70,11 +77,16 @@ async def list_revisions_endpoint(
 async def list_project_events_endpoint(
     project_id: UUID,
     session: SessionDependency,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    page: PageDependency,
 ) -> list[ProjectEventRead]:
     if not await project_exists(session, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    events = await list_project_events(session, project_id=project_id, limit=limit)
+    events = await list_project_events(
+        session,
+        project_id=project_id,
+        limit=page.limit,
+        offset=page.offset,
+    )
     return [ProjectEventRead.model_validate(event) for event in events]
 
 

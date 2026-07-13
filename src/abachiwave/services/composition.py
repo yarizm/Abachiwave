@@ -111,11 +111,16 @@ async def get_lyrics_version(
 async def list_lyrics_versions(
     session: AsyncSession,
     project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[LyricsVersion]:
     statement: Select[tuple[LyricsVersion]] = (
         select(LyricsVersion)
         .where(LyricsVersion.project_id == str(project_id))
         .order_by(LyricsVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -173,11 +178,16 @@ async def get_chord_progression_version(
 async def list_chord_progression_versions(
     session: AsyncSession,
     project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[ChordProgressionVersion]:
     statement: Select[tuple[ChordProgressionVersion]] = (
         select(ChordProgressionVersion)
         .where(ChordProgressionVersion.project_id == str(project_id))
         .order_by(ChordProgressionVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
@@ -247,11 +257,16 @@ async def get_midi_asset_version(
 async def list_midi_asset_versions(
     session: AsyncSession,
     project_id: UUID,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[MidiAssetVersion]:
     statement: Select[tuple[MidiAssetVersion]] = (
         select(MidiAssetVersion)
         .where(MidiAssetVersion.project_id == str(project_id))
         .order_by(MidiAssetVersion.created_at.desc(), MidiAssetVersion.version_number.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await session.execute(statement)
     return list(result.scalars().all())
