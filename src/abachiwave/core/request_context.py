@@ -53,7 +53,11 @@ async def request_context_middleware(
         response = await call_next(request)
     except Exception as error:
         logger.error("request_failed", error_type=type(error).__name__)
-        response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers={"X-Error-Code": "internal_error"},
+        )
 
     response.headers[settings.request_id_header] = request_id
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
