@@ -12,7 +12,12 @@ from abachiwave.models.demo import (
 from abachiwave.models.project import Project
 from abachiwave.services.generation_runs import TASK_TIMEOUT_ERROR, run_generation_with_timeout
 from abachiwave.services.task_queue import ArqTaskQueue
-from abachiwave.worker import build_redis_settings, health_check, load_generation_log_context
+from abachiwave.worker import (
+    build_redis_settings,
+    health_check,
+    load_generation_log_context,
+    run_text_evaluation_job,
+)
 
 
 @pytest.mark.asyncio
@@ -137,3 +142,27 @@ async def test_generation_timeout_marks_run_failed() -> None:
     assert run.status == GenerationRunStatus.failed
     assert run.error_message == TASK_TIMEOUT_ERROR
     assert marked == [(run_id, TASK_TIMEOUT_ERROR)]
+
+
+@pytest.mark.asyncio
+async def test_evaluation_exception_marks_run_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any non-timeout exception escaping execute_text_evaluation must mark the
+    run failed, or the evaluation_runs row stays 'running' forever."""
+    async def boom(_run_uuid: UUID) -> None:
+        raise RuntimeError("provider exploded")
+
+    monkeypatch.setattr("abachiwave.worker.execute_text_evaluation", boom)
+    marked: list[tuple[UUID, str, str]] = []
+
+    async def fake_mark(run_uuid: UUID, error_code: str, error_message: str) -> None:
+        marked.append((run_uuid, error_code, error_message))
+
+    monkeypatch.setattr("abachiwave.worker.mark_text_evaluation_failed", fake_mark)
+    run_id = uuid4()
+
+    result = await run_text_evaluation_job({}, str(run_id))
+
+    assert result == {"status": "failed"}
+    assert marked == [(run_id, "evaluation_failed", "Text evaluation failed: RuntimeError")]

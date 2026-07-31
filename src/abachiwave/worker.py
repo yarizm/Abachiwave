@@ -72,6 +72,21 @@ async def run_text_evaluation_job(ctx: dict[str, Any], run_id: str) -> dict[str,
         )
         logger.error("text_evaluation_timed_out", evaluation_run_id=run_id)
         return {"status": "failed"}
+    except Exception as error:
+        # The run row was already committed as 'running' by the executor;
+        # anything that escapes must be marked failed or the row stays
+        # 'running' forever. Log the type only, never the error content.
+        await mark_text_evaluation_failed(
+            run_uuid,
+            "evaluation_failed",
+            f"Text evaluation failed: {type(error).__name__}",
+        )
+        logger.error(
+            "text_evaluation_failed",
+            evaluation_run_id=run_id,
+            error_type=type(error).__name__,
+        )
+        return {"status": "failed"}
 
 
 async def load_generation_log_context(
