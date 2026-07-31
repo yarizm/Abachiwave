@@ -51,7 +51,7 @@ export const zhCN = {
   "Arrangement saved": "编排已保存",
   "Comment added": "评论已添加",
   "Demo generation started": "Demo 生成已开始",
-  "Arrangement generation started": "编排查成已开始",
+  "Arrangement generation started": "编排生成已开始",
   "Lyrics generation started": "歌词生成已开始",
   "Chords generation started": "和弦生成已开始",
   "MIDI generation started": "MIDI 生成已开始",
