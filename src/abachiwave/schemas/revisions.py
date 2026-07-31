@@ -18,6 +18,8 @@ RestoreAssetType = Literal["lyrics", "midi_melody", "arrangement"]
 
 class RevisionRequestCreate(BaseModel):
     feedback: str = Field(min_length=1, max_length=4000)
+    provider_profile_id: UUID | None = None
+    candidate_count: int | None = Field(default=None, ge=1, le=3)
 
     @field_validator("feedback")
     @classmethod

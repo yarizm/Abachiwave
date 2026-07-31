@@ -1,5 +1,12 @@
 import { fetchJson } from "@/lib/api-client";
 import {
+  GenerationCandidate,
+  ProviderCapability,
+  candidatesEndpoint,
+  providerCapabilitiesEndpoint,
+  sortGenerationCandidates,
+} from "@/lib/ai-generation";
+import {
   ArrangementPlanVersion,
   AudioDemoVersion,
   AudioUpload,
@@ -67,6 +74,8 @@ export type WorkspaceSnapshot = {
   projectHandoff: ProjectHandoff;
   projectReview: ProjectReview;
   audioUploads: AudioUpload[];
+  providerProfiles: ProviderCapability[];
+  candidates: GenerationCandidate[];
 };
 
 export async function loadWorkspaceSnapshot(
@@ -91,6 +100,8 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads,
+    providerProfiles,
+    candidates,
   ] = await Promise.all([
     fetchJson<Project>(projectDetailEndpoint(apiBaseUrl, projectId), "Project"),
     fetchJson<IdeaIntake | null>(latestIntakeEndpoint(apiBaseUrl, projectId), "Latest intake"),
@@ -118,6 +129,8 @@ export async function loadWorkspaceSnapshot(
     fetchJson<ProjectHandoff>(projectHandoffEndpoint(apiBaseUrl, projectId), "Project handoff"),
     fetchJson<ProjectReview>(projectReviewEndpoint(apiBaseUrl, projectId), "Project review"),
     fetchJson<AudioUpload[]>(audioUploadsEndpoint(apiBaseUrl, projectId), "Audio upload list"),
+    fetchJson<ProviderCapability[]>(providerCapabilitiesEndpoint(apiBaseUrl), "Provider list"),
+    fetchJson<GenerationCandidate[]>(candidatesEndpoint(apiBaseUrl, projectId), "Candidate list"),
   ]);
 
   return {
@@ -138,5 +151,7 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads: sortAudioUploads(audioUploads),
+    providerProfiles,
+    candidates: sortGenerationCandidates(candidates),
   };
 }

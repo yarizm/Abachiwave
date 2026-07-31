@@ -86,6 +86,8 @@ async def test_unapproved_song_spec_cannot_generate_lyrics(
     )
 
     assert response.status_code == 409
+    assert response.headers["X-Error-Code"] == "song_spec_not_approved"
+    assert response.headers["X-Error-Hint"] == "approve_song_spec"
 
 
 @pytest.mark.asyncio
@@ -128,7 +130,13 @@ async def test_lyrics_and_chords_create_editable_versions(
     )
     assert chords_response.status_code == 201
     chords = chords_response.json()
+    assert chords["schema_version"] == 2
     assert chords["sections"][0]["chords"] == ["E", "B", "C#m", "A"]
+    first_event = chords["sections"][0]["measures"][0]["events"][0]
+    assert first_event["symbol"] == "E"
+    assert first_event["roman_numeral"] == "I"
+    assert first_event["nashville_number"] == "1"
+    assert first_event["midi_notes"]
 
     second_chords_response = await client.post(
         f"/api/v1/projects/{project_id}/chords/generate",
@@ -169,6 +177,158 @@ async def test_lyrics_and_chords_create_editable_versions(
         "chords.generated",
         "chords.edited",
     }.issubset(event_types)
+
+
+@pytest.mark.asyncio
+async def test_structured_chords_support_positions_inversions_and_transpose(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+) -> None:
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+    generated_response = await client.post(
+        f"/api/v1/projects/{project_id}/chords/generate",
+        json={"song_spec_id": song_spec["id"]},
+    )
+    assert generated_response.status_code == 201
+    generated = generated_response.json()
+    original_event_id = generated["sections"][0]["measures"][0]["events"][0]["event_id"]
+
+    edit_response = await client.patch(
+        f"/api/v1/projects/{project_id}/chords/{generated['id']}",
+        json={
+            "sections": [
+                {
+                    "section_id": "verse",
+                    "label": "Verse",
+                    "measures": [
+                        {
+                            "measure_number": 1,
+                            "events": [
+                                {
+                                    "event_id": original_event_id,
+                                    "measure": 1,
+                                    "beat": 1,
+                                    "duration_beats": 2,
+                                    "symbol": "Emaj7",
+                                    "inversion": 1,
+                                },
+                                {
+                                    "event_id": "verse-measure-1-event-2",
+                                    "measure": 1,
+                                    "beat": 3,
+                                    "duration_beats": 2,
+                                    "symbol": "Aadd9",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    assert edit_response.status_code == 200
+    edited = edit_response.json()
+    events = edited["sections"][0]["measures"][0]["events"]
+    assert edited["sections"][0]["chords"] == ["Emaj7", "Aadd9"]
+    assert events[0]["beat"] == 1
+    assert events[0]["bass"] == "G#"
+    assert events[0]["inversion"] == 1
+    assert events[0]["extensions"] == ["7"]
+    assert events[1]["beat"] == 3
+
+    transpose_response = await client.post(
+        f"/api/v1/projects/{project_id}/chords/{edited['id']}/transpose",
+        json={"semitones": 2},
+    )
+    assert transpose_response.status_code == 201
+    transposed = transpose_response.json()
+    transposed_events = transposed["sections"][0]["measures"][0]["events"]
+    assert transposed["parent_version_id"] == edited["id"]
+    assert transposed["key"] == "F# major"
+    assert transposed_events[0]["event_id"] == original_event_id
+    assert transposed_events[0]["symbol"] == "F#maj7"
+    assert transposed_events[0]["root"] == "F#"
+    assert transposed_events[0]["roman_numeral"] == "I65"
+
+    selected_response = await client.post(
+        f"/api/v1/projects/{project_id}/chords/{transposed['id']}/transpose",
+        json={"semitones": -1, "section_ids": ["verse"]},
+    )
+    assert selected_response.status_code == 201
+    selected = selected_response.json()
+    assert selected["key"] == "F# major"
+    assert selected["sections"][0]["measures"][0]["events"][0]["root"] == "F"
+
+    events_response = await client.get(f"/api/v1/projects/{project_id}/events")
+    assert events_response.status_code == 200
+    assert any(event["event_type"] == "chords.transposed" for event in events_response.json())
+
+
+@pytest.mark.asyncio
+async def test_invalid_chord_symbol_and_overlapping_events_return_422(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+) -> None:
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+    generated = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/chords/generate",
+            json={"song_spec_id": song_spec["id"]},
+        )
+    ).json()
+    base_event = generated["sections"][0]["measures"][0]["events"][0]
+
+    invalid_symbol = await client.patch(
+        f"/api/v1/projects/{project_id}/chords/{generated['id']}",
+        json={
+            "sections": [
+                {
+                    "section_id": "verse",
+                    "label": "Verse",
+                    "measures": [
+                        {
+                            "measure_number": 1,
+                            "events": [{**base_event, "symbol": "H13"}],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    assert invalid_symbol.status_code == 422
+    assert invalid_symbol.json()["detail"] == "Unsupported chord symbol: H13"
+    assert invalid_symbol.headers["X-Error-Code"] == "chord_theory_error"
+    assert invalid_symbol.headers["X-Error-Hint"] == "check_chord_symbol"
+
+    overlap = await client.patch(
+        f"/api/v1/projects/{project_id}/chords/{generated['id']}",
+        json={
+            "sections": [
+                {
+                    "section_id": "verse",
+                    "label": "Verse",
+                    "measures": [
+                        {
+                            "measure_number": 1,
+                            "events": [
+                                {**base_event, "duration_beats": 3},
+                                {
+                                    **base_event,
+                                    "event_id": "overlap-event",
+                                    "beat": 2,
+                                    "duration_beats": 2,
+                                    "symbol": "A",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    assert overlap.status_code == 422
+    assert "overlap" in overlap.json()["detail"].lower()
+    assert overlap.headers["X-Error-Code"] == "chord_theory_error"
 
 
 @pytest.mark.asyncio

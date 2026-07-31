@@ -19,6 +19,7 @@ import {
   emptyArrangementPlan,
 } from "@/components/workspace/delivery-workspace";
 import { ProjectOverview } from "@/components/workspace/project-overview";
+import { StructureWorkspace } from "@/components/workspace/structure-workspace";
 import {
   SongSpecDraftForm,
   SongSpecVersionsPanel,
@@ -26,11 +27,25 @@ import {
 } from "@/components/workspace/song-spec-workspace";
 import { useLocale } from "@/i18n/locale-provider";
 import { fetchJson } from "@/lib/api-client";
+import {
+  CandidateGeneratePayload,
+  CandidateSelection,
+  TextWorkflow,
+  candidateGenerateEndpoint,
+  candidateSelectEndpoint,
+  textGenerationRuns,
+} from "@/lib/ai-generation";
+import {
+  LyricsRewritePayload,
+  LyricsRewritePreview,
+  lyricsRewriteEndpoint,
+} from "@/lib/lyrics-editor";
 
 import {
   ArrangementPlan,
   AudioUpload,
   AudioUploadKind,
+  ChordPreview,
   ChordProgressionVersion,
   ChordSection,
   GenerationRun,
@@ -54,6 +69,8 @@ import {
   canGenerateArrangement,
   canGenerateComposition,
   chordVersionEndpoint,
+  chordPreviewEndpoint,
+  chordTransposeEndpoint,
   chordsGenerateEndpoint,
   demoGenerateEndpoint,
   exportsEndpoint,
@@ -109,6 +126,11 @@ import {
   validateIdea,
   workspaceState,
 } from "@/lib/song-specs";
+import {
+  StructureChange,
+  StructureChangeRequest,
+  structureEndpoint,
+} from "@/lib/structure";
 
 const workspaceLoading = () => <div className="workspace-panel-loading" aria-hidden="true" />;
 const AudioWorkspace = dynamic(
@@ -130,6 +152,13 @@ const RevisionWorkspace = dynamic(
   () =>
     import("@/components/workspace/revision-workspace").then(
       (module) => module.RevisionWorkspace,
+    ),
+  { loading: workspaceLoading },
+);
+const CandidateWorkspace = dynamic(
+  () =>
+    import("@/components/workspace/candidate-workspace").then(
+      (module) => module.CandidateWorkspace,
     ),
   { loading: workspaceLoading },
 );
@@ -168,6 +197,8 @@ export default function ProjectWorkspaceClient() {
     projectReview,
     audioUploads,
     setAudioUploads,
+    providerProfiles,
+    candidates,
     isLoading,
     error,
     setError,
@@ -176,9 +207,6 @@ export default function ProjectWorkspaceClient() {
   const [idea, setIdea] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [draftForm, setDraftForm] = useState<SongSpecDraftForm>(() => emptyDraftForm());
-  const [lyricDraft, setLyricDraft] = useState<LyricSection[]>([]);
-  const [hookDraft, setHookDraft] = useState<HookCandidate[]>([]);
-  const [chordDraft, setChordDraft] = useState<ChordSection[]>([]);
   const [arrangementDraft, setArrangementDraft] = useState<ArrangementPlan>(() => emptyArrangementPlan());
   const [revisionFeedback, setRevisionFeedback] = useState("");
   const [commentBody, setCommentBody] = useState("");
@@ -217,6 +245,7 @@ export default function ProjectWorkspaceClient() {
     () => sortedRuns.filter((run) => run.run_type === "audio_to_midi"),
     [sortedRuns],
   );
+  const textRuns = useMemo(() => textGenerationRuns(sortedRuns), [sortedRuns]);
   const melodyAssets = useMemo(
     () => sortedMidiAssets.filter((asset) => asset.kind === "melody"),
     [sortedMidiAssets],
@@ -265,15 +294,6 @@ export default function ProjectWorkspaceClient() {
   useEffect(() => {
     setDraftForm(activeVersion ? draftFormFromSongSpec(activeVersion.song_spec) : emptyDraftForm());
   }, [activeVersion]);
-
-  useEffect(() => {
-    setLyricDraft(activeLyrics?.sections ?? []);
-    setHookDraft(activeLyrics?.hook_candidates ?? []);
-  }, [activeLyrics]);
-
-  useEffect(() => {
-    setChordDraft(activeChords?.sections ?? []);
-  }, [activeChords]);
 
   useEffect(() => {
     setArrangementDraft(activeArrangement?.arrangement_plan ?? emptyArrangementPlan());
@@ -330,6 +350,68 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
+  async function handleGenerateCandidates(input: {
+    workflow: TextWorkflow;
+    providerProfileId: string;
+    candidateCount: number;
+    feedback: string;
+  }) {
+    const payload: CandidateGeneratePayload = {
+      workflow: input.workflow,
+      provider_profile_id: input.providerProfileId,
+      candidate_count: input.candidateCount,
+    };
+    if (input.workflow === "song_spec" && latestIntake) {
+      payload.intake_id = latestIntake.intake_id;
+    }
+    if (input.workflow === "lyrics" || input.workflow === "arrangement") {
+      if (!approvedVersion) {
+        setError(t("Approve a SongSpec first."));
+        return;
+      }
+      payload.song_spec_id = approvedVersion.id;
+    }
+    if (input.workflow === "revision") {
+      payload.feedback = input.feedback;
+    }
+    pendingActions.begin("ai");
+    setError(null);
+    try {
+      const run = await fetchJson<GenerationRun>(
+        candidateGenerateEndpoint(apiBaseUrl, projectId),
+        "Candidate generation",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
+      await loadWorkspace();
+    } catch (candidateError) {
+      setError(errorMessage(candidateError, "Failed to generate candidates"));
+    } finally {
+      pendingActions.end("ai");
+    }
+  }
+
+  async function handleSelectCandidate(candidateId: string) {
+    pendingActions.begin("ai");
+    setError(null);
+    try {
+      await fetchJson<CandidateSelection>(
+        candidateSelectEndpoint(apiBaseUrl, projectId, candidateId),
+        "Candidate selection",
+        { method: "POST" },
+      );
+      await loadWorkspace();
+    } catch (candidateError) {
+      setError(errorMessage(candidateError, "Failed to select candidate"));
+    } finally {
+      pendingActions.end("ai");
+    }
+  }
+
   async function handleSongSpecSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeVersion) {
@@ -381,6 +463,33 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
+  async function handleStructureChange(
+    payload: StructureChangeRequest,
+  ): Promise<StructureChange> {
+    pendingActions.begin("structure");
+    setError(null);
+    try {
+      const result = await fetchJson<StructureChange>(
+        structureEndpoint(apiBaseUrl, projectId),
+        "Structure change",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (result.status === "applied") {
+        await loadWorkspace();
+      }
+      return result;
+    } catch (structureError) {
+      setError(errorMessage(structureError, "Failed to update song structure"));
+      throw structureError;
+    } finally {
+      pendingActions.end("structure");
+    }
+  }
+
   async function handleGenerateLyrics() {
     if (!approvedVersion) {
       setError(t("Approve a SongSpec before generating lyrics."));
@@ -407,17 +516,19 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
-  async function handleLyricsSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleLyricsSave(
+    sections: LyricSection[],
+    hookCandidates: HookCandidate[],
+  ) {
     if (!activeLyrics) {
       return;
     }
-    const validationError = validateLyricSections(lyricDraft);
+    const validationError = validateLyricSections(sections);
     if (validationError) {
       setError(text(validationError));
       return;
     }
-    pendingActions.begin("composition");
+    pendingActions.begin("lyrics");
     setError(null);
     try {
       const edited = await fetchJson<LyricsVersion>(
@@ -427,8 +538,8 @@ export default function ProjectWorkspaceClient() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sections: lyricDraft,
-            hook_candidates: normalizeHookDraft(hookDraft),
+            sections,
+            hook_candidates: normalizeHookDraft(hookCandidates),
           }),
         },
       );
@@ -437,7 +548,33 @@ export default function ProjectWorkspaceClient() {
     } catch (lyricsError) {
       setError(errorMessage(lyricsError, "Failed to edit lyrics"));
     } finally {
-      pendingActions.end("composition");
+      pendingActions.end("lyrics");
+    }
+  }
+
+  async function handleLyricsRewrite(
+    payload: LyricsRewritePayload,
+  ): Promise<LyricsRewritePreview> {
+    if (!activeLyrics) {
+      throw new Error("LyricsVersion not found");
+    }
+    pendingActions.begin("lyricsRewrite");
+    setError(null);
+    try {
+      return await fetchJson<LyricsRewritePreview>(
+        lyricsRewriteEndpoint(apiBaseUrl, projectId, activeLyrics.id),
+        "Lyrics rewrite",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+    } catch (lyricsError) {
+      setError(errorMessage(lyricsError, "Failed to preview lyrics rewrite"));
+      throw lyricsError;
+    } finally {
+      pendingActions.end("lyricsRewrite");
     }
   }
 
@@ -446,7 +583,7 @@ export default function ProjectWorkspaceClient() {
       setError(t("Approve a SongSpec before generating chords."));
       return;
     }
-    pendingActions.begin("composition");
+    pendingActions.begin("chords");
     setError(null);
     try {
       const generated = await fetchJson<ChordProgressionVersion>(
@@ -466,21 +603,20 @@ export default function ProjectWorkspaceClient() {
     } catch (chordsError) {
       setError(errorMessage(chordsError, "Failed to generate chords"));
     } finally {
-      pendingActions.end("composition");
+      pendingActions.end("chords");
     }
   }
 
-  async function handleChordsSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleChordsSave(sections: ChordSection[]) {
     if (!activeChords) {
       return;
     }
-    const validationError = validateChordSections(chordDraft);
+    const validationError = validateChordSections(sections, activeChords.time_signature);
     if (validationError) {
       setError(text(validationError));
       return;
     }
-    pendingActions.begin("composition");
+    pendingActions.begin("chords");
     setError(null);
     try {
       const edited = await fetchJson<ChordProgressionVersion>(
@@ -489,7 +625,7 @@ export default function ProjectWorkspaceClient() {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sections: chordDraft }),
+          body: JSON.stringify({ sections }),
         },
       );
       setChordVersions((current) => sortChordVersions([edited, ...current]));
@@ -497,7 +633,65 @@ export default function ProjectWorkspaceClient() {
     } catch (chordsError) {
       setError(errorMessage(chordsError, "Failed to edit chords"));
     } finally {
-      pendingActions.end("composition");
+      pendingActions.end("chords");
+    }
+  }
+
+  async function handleChordsPreview(sections: ChordSection[]): Promise<ChordPreview> {
+    if (!activeChords) {
+      throw new Error("ChordProgressionVersion not found");
+    }
+    const validationError = validateChordSections(sections, activeChords.time_signature);
+    if (validationError) {
+      const validation = new Error(text(validationError));
+      setError(validation.message);
+      throw validation;
+    }
+    pendingActions.begin("chordsPreview");
+    setError(null);
+    try {
+      return await fetchJson<ChordPreview>(
+        chordPreviewEndpoint(apiBaseUrl, projectId, activeChords.id),
+        "Chords preview",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sections }),
+        },
+      );
+    } catch (chordsError) {
+      setError(errorMessage(chordsError, "Failed to validate chords"));
+      throw chordsError;
+    } finally {
+      pendingActions.end("chordsPreview");
+    }
+  }
+
+  async function handleChordsTranspose(semitones: number, sectionIds: string[] | null) {
+    if (!activeChords) {
+      return;
+    }
+    pendingActions.begin("chordsTranspose");
+    setError(null);
+    try {
+      const transposed = await fetchJson<ChordProgressionVersion>(
+        chordTransposeEndpoint(apiBaseUrl, projectId, activeChords.id),
+        "Chords transpose",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            semitones,
+            section_ids: sectionIds,
+          }),
+        },
+      );
+      setChordVersions((current) => sortChordVersions([transposed, ...current]));
+      await loadWorkspace();
+    } catch (chordsError) {
+      setError(errorMessage(chordsError, "Failed to transpose chords"));
+    } finally {
+      pendingActions.end("chordsTranspose");
     }
   }
 
@@ -1025,6 +1219,26 @@ export default function ProjectWorkspaceClient() {
         state={state}
       />
 
+      <StructureWorkspace
+        isSaving={pendingActions.isPending("structure")}
+        onChange={handleStructureChange}
+        projectId={projectId}
+        sourceVersion={approvedVersion}
+      />
+
+      <CandidateWorkspace
+        approvedSongSpecId={approvedVersion?.id ?? null}
+        canGenerateArrangement={canGenerateArrangementPlan}
+        candidates={candidates}
+        isSaving={pendingActions.isPending("ai", "tasks")}
+        latestIntakeId={latestIntake?.intake_id ?? null}
+        onCancel={handleCancelRun}
+        onGenerate={handleGenerateCandidates}
+        onSelect={handleSelectCandidate}
+        providers={providerProfiles}
+        runs={textRuns}
+      />
+
       <div className="asset-grid">
         <AudioWorkspace
           approvedSongSpecId={approvedVersion?.id ?? null}
@@ -1047,42 +1261,23 @@ export default function ProjectWorkspaceClient() {
           activeChords={activeChords}
           activeLyrics={activeLyrics}
           canGenerate={canGenerateAssets}
-          chordDraft={chordDraft}
-          hookDraft={hookDraft}
-          isSaving={pendingActions.isPending("composition")}
-          lyricDraft={lyricDraft}
+          isGeneratingChords={pendingActions.isPending("chords")}
+          isGeneratingLyrics={pendingActions.isPending("composition")}
+          isPreviewingChords={pendingActions.isPending("chordsPreview")}
+          isRewritingLyrics={pendingActions.isPending("lyricsRewrite")}
+          isSavingComposition={pendingActions.isPending("composition")}
+          isSavingChords={pendingActions.isPending("chords")}
+          isSavingLyrics={pendingActions.isPending("lyrics")}
+          isTransposingChords={pendingActions.isPending("chordsTranspose")}
           midiAssets={sortedMidiAssets}
-          onChordBarsChange={(index, bars) => {
-            setChordDraft((current) =>
-              current.map((section, sectionIndex) =>
-                sectionIndex === index ? { ...section, bars } : section,
-              ),
-            );
-          }}
-          onChordsChange={(index, chords) => {
-            setChordDraft((current) =>
-              current.map((section, sectionIndex) =>
-                sectionIndex === index ? { ...section, chords } : section,
-              ),
-            );
-          }}
-          onChordsSubmit={handleChordsSubmit}
           onGenerateChords={handleGenerateChords}
           onGenerateLyrics={handleGenerateLyrics}
           onGenerateMidi={handleGenerateMidi}
-          onHookChange={(index, text) => {
-            setHookDraft((current) =>
-              current.map((hook, hookIndex) => (hookIndex === index ? { ...hook, text } : hook)),
-            );
-          }}
-          onLyricsSubmit={handleLyricsSubmit}
-          onLyricSectionChange={(index, text) => {
-            setLyricDraft((current) =>
-              current.map((section, sectionIndex) =>
-                sectionIndex === index ? { ...section, text } : section,
-              ),
-            );
-          }}
+          onChordsPreview={handleChordsPreview}
+          onChordsSave={handleChordsSave}
+          onChordsTranspose={handleChordsTranspose}
+          onLyricsRewrite={handleLyricsRewrite}
+          onLyricsSave={handleLyricsSave}
           projectId={projectId}
         />
       </div>

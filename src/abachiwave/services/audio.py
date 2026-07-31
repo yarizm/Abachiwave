@@ -72,9 +72,7 @@ async def create_audio_upload(
     if project is None:
         return None
     upload_limit = (
-        get_settings().max_project_uploads
-        if max_project_uploads is None
-        else max_project_uploads
+        get_settings().max_project_uploads if max_project_uploads is None else max_project_uploads
     )
     upload_count = await session.scalar(
         select(func.count())
@@ -82,9 +80,7 @@ async def create_audio_upload(
         .where(AudioUpload.project_id == str(project_id))
     )
     if (upload_count or 0) >= upload_limit:
-        raise AudioUploadLimitError(
-            f"Project audio upload limit reached ({upload_limit})"
-        )
+        raise AudioUploadLimitError(f"Project audio upload limit reached ({upload_limit})")
     _validate_upload(content_type, data)
     try:
         metadata = analyze_wav_bytes(data)
@@ -246,6 +242,7 @@ async def create_audio_to_midi_run(
         run.arq_job_id = await queue.enqueue_audio_to_midi(UUID(run.id))
     except Exception as exc:
         run.status = GenerationRunStatus.failed
+        run.error_code = "queue_enqueue_failed"
         run.error_message = str(exc)
         run.completed_at = datetime.now(UTC)
         await session.commit()
@@ -279,6 +276,7 @@ async def execute_audio_to_midi(
                 raise ValueError("GenerationRun is not an audio-to-MIDI run")
             run.status = GenerationRunStatus.running
             run.started_at = datetime.now(UTC)
+            run.error_code = None
             run.error_message = None
             await session.commit()
             await session.refresh(run)
@@ -304,7 +302,7 @@ async def execute_audio_to_midi(
                     filename=upload.filename,
                     song_spec=song_spec_to_data(song_spec),
                     provider_params=run.provider_params,
-                )
+                ),
             )
             locked_run = await lock_generation_run(session, run_id)
             if locked_run is None:
@@ -331,6 +329,7 @@ async def execute_audio_to_midi(
             run.result_midi_asset_id = midi_asset.id
             run.status = GenerationRunStatus.succeeded
             run.completed_at = datetime.now(UTC)
+            run.error_code = None
             run.error_message = None
             add_project_event(
                 session,
@@ -358,6 +357,7 @@ async def execute_audio_to_midi(
             if failed_run.status == GenerationRunStatus.cancelled:
                 return failed_run
             failed_run.status = GenerationRunStatus.failed
+            failed_run.error_code = "audio_to_midi_failed"
             failed_run.error_message = str(exc)
             failed_run.completed_at = datetime.now(UTC)
             await session.commit()

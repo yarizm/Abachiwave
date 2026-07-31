@@ -59,15 +59,21 @@ async def test_task_queue_reuses_pool_until_closed(monkeypatch: pytest.MonkeyPat
     queue = ArqTaskQueue("redis://localhost:6379/0")
     first_run = uuid4()
     second_run = uuid4()
+    third_run = uuid4()
+    fourth_run = uuid4()
 
     assert await queue.enqueue_demo_generation(first_run) == "job-1"
     assert await queue.enqueue_audio_to_midi(second_run) == "job-1"
+    assert await queue.enqueue_text_generation(third_run) == "job-1"
+    assert await queue.enqueue_text_evaluation(fourth_run) == "job-1"
     await queue.close()
 
     assert create_calls == 1
     assert pool.calls == [
         ("generate_demo_job", str(first_run)),
         ("extract_midi_from_audio_job", str(second_run)),
+        ("generate_text_candidates_job", str(third_run)),
+        ("run_text_evaluation_job", str(fourth_run)),
     ]
     assert pool.closed is True
 

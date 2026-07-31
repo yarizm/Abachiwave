@@ -203,6 +203,8 @@ async def test_audio_upload_rejects_invalid_type_and_size(
         files={"file": ("humming.mp3", b"not wav", "audio/mpeg")},
     )
     assert invalid_type_response.status_code == 415
+    assert invalid_type_response.headers["X-Error-Code"] == "unsupported_media_type"
+    assert invalid_type_response.headers["X-Error-Hint"] == "check_format"
 
     monkeypatch.setattr("abachiwave.services.audio.MAX_AUDIO_UPLOAD_BYTES", 16)
     too_large_response = await client.post(
@@ -211,6 +213,8 @@ async def test_audio_upload_rejects_invalid_type_and_size(
         files={"file": ("humming.wav", _wav_bytes(), "audio/wav")},
     )
     assert too_large_response.status_code == 413
+    assert too_large_response.headers["X-Error-Code"] == "upload_too_large"
+    assert too_large_response.headers["X-Error-Hint"] == "trim_audio_under_25mb"
 
 
 @pytest.mark.asyncio

@@ -74,7 +74,7 @@ async def create_revision_request(
     project = await session.get(Project, str(project_id))
     if project is None:
         return None
-    tasks = await _plan_revision_tasks(session, project_id, feedback)
+    tasks = await plan_revision_tasks(session, project_id, feedback)
     revision = RevisionRequest(
         project_id=str(project_id),
         feedback=feedback,
@@ -265,6 +265,7 @@ async def restore_version(
                 song_spec_id=source_lyrics.song_spec_id,
                 version_number=version_number,
                 parent_version_id=source_lyrics.id,
+                schema_version=source_lyrics.schema_version,
                 sections=source_lyrics.sections,
                 hook_candidates=source_lyrics.hook_candidates,
             ),
@@ -369,7 +370,7 @@ def restored_version_to_read(
     raise TypeError("Unsupported restored version")
 
 
-async def _plan_revision_tasks(
+async def plan_revision_tasks(
     session: AsyncSession,
     project_id: UUID,
     feedback: str,
@@ -480,7 +481,9 @@ async def _apply_lyrics_task(
             version_number=version_number,
             parent_version_id=current.id,
             source_revision_request_id=str(revision_id),
-            sections=[section.model_dump() for section in revised_sections],
+            sections=[
+                section.model_dump(exclude_computed_fields=True) for section in revised_sections
+            ],
             hook_candidates=current.hook_candidates,
         ),
     )
@@ -508,6 +511,7 @@ async def _apply_melody_task(
         return None
     data = storage.get_bytes(current.storage_key)
     raised_data = _transpose_midi(data, semitones=2)
+
     def build_version(version_number: int) -> MidiAssetVersion:
         asset_id = str(uuid4())
         filename = f"melody-v{version_number}.mid"
@@ -602,7 +606,18 @@ def _revise_lyric_section(section: LyricSection, task: RevisionTask) -> LyricSec
     if task.target_section_id and task.target_section_id not in section.section_id.lower():
         return section
     text = f"{section.text}\nRevision: make this section more direct, vivid, and singable."
-    return LyricSection(section_id=section.section_id, label=section.label, text=text)
+    return LyricSection(
+        section_id=section.section_id,
+        label=section.label,
+        text=text,
+        lines=[
+            *section.lines,
+            {
+                "line_id": str(uuid4()),
+                "text": "Revision: make this section more direct, vivid, and singable.",
+            },
+        ],
+    )
 
 
 def _revise_arrangement_section(
@@ -625,9 +640,7 @@ def _revise_arrangement_section(
         label=section.label,
         instruments=instruments,
         energy_level=(
-            max(1, section.energy_level - 1)
-            if "空" in task.summary
-            else section.energy_level
+            max(1, section.energy_level - 1) if "空" in task.summary else section.energy_level
         ),
         production_notes=notes,
     )

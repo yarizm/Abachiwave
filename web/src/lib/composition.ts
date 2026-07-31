@@ -4,7 +4,7 @@ import { SongSpecVersion } from "./song-specs";
 export type MidiAssetKind = "chord" | "melody" | "hook";
 export type ExportBundleStatus = "ready" | "failed";
 export type GenerationRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type GenerationRunType = "demo_generation" | "audio_to_midi";
+export type GenerationRunType = "demo_generation" | "audio_to_midi" | "text_generation";
 export type RevisionRequestStatus = "planned" | "applied" | "rejected";
 export type RevisionTaskTarget = "lyrics" | "midi_melody" | "arrangement";
 export type VersionAssetType = "lyrics" | "midi_melody" | "arrangement" | "demo";
@@ -79,10 +79,22 @@ export type ProjectHandoff = {
   generated_at: string;
 };
 
+export type LyricLine = {
+  line_id: string;
+  text: string;
+  rhyme_label: string | null;
+  character_count: number;
+  word_count: number;
+  syllable_count: number;
+  rhyme_key: string | null;
+  stress_positions: number[];
+};
+
 export type LyricSection = {
   section_id: string;
   label: string;
   text: string;
+  lines: LyricLine[];
 };
 
 export type HookCandidate = {
@@ -97,10 +109,34 @@ export type LyricsVersion = {
   version_number: number;
   parent_version_id: string | null;
   source_revision_request_id: string | null;
+  schema_version: number;
   sections: LyricSection[];
   hook_candidates: HookCandidate[];
   created_at: string;
   updated_at: string;
+};
+
+export type ChordEvent = {
+  event_id: string;
+  measure: number;
+  beat: number;
+  duration_beats: number;
+  symbol: string;
+  inversion: number | null;
+  root: string | null;
+  bass: string | null;
+  quality: string | null;
+  extensions: string[];
+  pitch_classes: number[];
+  midi_notes: number[];
+  roman_numeral: string | null;
+  nashville_number: string | null;
+  borrowed: boolean;
+};
+
+export type ChordMeasure = {
+  measure_number: number;
+  events: ChordEvent[];
 };
 
 export type ChordSection = {
@@ -108,6 +144,7 @@ export type ChordSection = {
   label: string;
   bars: number;
   chords: string[];
+  measures: ChordMeasure[];
 };
 
 export type ChordProgressionVersion = {
@@ -117,12 +154,21 @@ export type ChordProgressionVersion = {
   lyrics_version_id: string | null;
   version_number: number;
   parent_version_id: string | null;
+  schema_version: number;
   key: string;
   tempo_bpm: number;
   time_signature: string;
   sections: ChordSection[];
   created_at: string;
   updated_at: string;
+};
+
+export type ChordPreview = {
+  source_chord_id: string;
+  key: string;
+  tempo_bpm: number;
+  time_signature: string;
+  sections: ChordSection[];
 };
 
 export type MidiAssetVersion = {
@@ -222,6 +268,8 @@ export type GenerationRun = {
   provider_name: string;
   provider_version: string;
   provider_params: Record<string, unknown>;
+  provider_usage: Record<string, unknown>;
+  error_code: string | null;
   error_message: string | null;
   retry_of_run_id: string | null;
   result_midi_asset_id: string | null;
@@ -365,6 +413,22 @@ export function chordVersionEndpoint(
   chordVersionId: string,
 ): string {
   return `${chordsEndpoint(apiBaseUrl, projectId)}/${chordVersionId}`;
+}
+
+export function chordPreviewEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  chordVersionId: string,
+): string {
+  return `${chordVersionEndpoint(apiBaseUrl, projectId, chordVersionId)}/preview`;
+}
+
+export function chordTransposeEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  chordVersionId: string,
+): string {
+  return `${chordVersionEndpoint(apiBaseUrl, projectId, chordVersionId)}/transpose`;
 }
 
 export function midiGenerateEndpoint(apiBaseUrl: string, projectId: string): string {
@@ -702,21 +766,64 @@ export function validateLyricSections(sections: LyricSection[]): string | null {
   if (sections.length === 0) {
     return "At least one lyric section is required.";
   }
+  if (sections.some((section) => section.lines.length === 0)) {
+    return "Each lyric section needs at least one line.";
+  }
+  if (sections.some((section) => section.lines.some((line) => !line.text.trim()))) {
+    return "Lyric lines must not be empty.";
+  }
+  const lineIds = sections.flatMap((section) => section.lines.map((line) => line.line_id));
+  if (new Set(lineIds).size !== lineIds.length) {
+    return "Lyric line IDs must be unique.";
+  }
   if (sections.some((section) => !section.text.trim())) {
     return "Lyric section text must not be empty.";
   }
   return null;
 }
 
-export function validateChordSections(sections: ChordSection[]): string | null {
+export function validateChordSections(
+  sections: ChordSection[],
+  timeSignature = "4/4",
+): string | null {
   if (sections.length === 0) {
     return "At least one chord section is required.";
   }
-  if (sections.some((section) => section.bars < 1 || section.chords.length === 0)) {
+  if (
+    sections.some(
+      (section) =>
+        section.bars < 1 ||
+        section.chords.length === 0 ||
+        section.measures.length === 0 ||
+        section.measures.some((measure) => measure.events.length === 0),
+    )
+  ) {
     return "Chord sections need at least one bar and one chord.";
   }
   if (sections.some((section) => section.chords.some((chord) => !chord.trim()))) {
     return "Chord names must not be empty.";
+  }
+  const beatsPerMeasure = Number(timeSignature.split("/")[0]) || 4;
+  for (const section of sections) {
+    for (const measure of section.measures) {
+      const events = [...measure.events].sort((left, right) => left.beat - right.beat);
+      let previousEnd = 0;
+      for (const event of events) {
+        const eventEnd = event.beat - 1 + event.duration_beats;
+        if (
+          !event.symbol.trim() ||
+          event.beat < 1 ||
+          event.duration_beats <= 0 ||
+          eventEnd > beatsPerMeasure
+        ) {
+          return "Chord positions must fit within their measure.";
+        }
+        if (event.beat - 1 < previousEnd) {
+          return "Chord events must not overlap.";
+        }
+        previousEnd = eventEnd;
+      }
+    }
   }
   return null;
 }

@@ -61,7 +61,7 @@ class ErrorHint(StrEnum):
     CONTACT_SUPPORT = "contact_support"
 
 
-@dataclass(frozen=True)
+@dataclass
 class ProblemError(Exception):
     """Exception translated by the global handler into a structured response.
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from abachiwave.models.song_spec import IdeaIntakeStatus, SongSpecStatus
 
@@ -55,6 +55,36 @@ class IdeaIntakeRead(BaseModel):
     updated_at: datetime
 
 
+class StructureSection(BaseModel):
+    section_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    label: str = Field(min_length=1, max_length=120)
+
+    @field_validator("section_id", "label")
+    @classmethod
+    def normalize_section_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value must not be blank")
+        return normalized
+
+
+def build_structure_sections(labels: list[str]) -> list[StructureSection]:
+    sections: list[StructureSection] = []
+    counts: dict[str, int] = {}
+    for index, label in enumerate(labels):
+        normalized_label = label.strip()
+        base = "".join(
+            character if character.isascii() and character.isalnum() else "-"
+            for character in normalized_label.lower()
+        )
+        base = "-".join(part for part in base.split("-") if part) or f"section-{index + 1}"
+        base = base[:56]
+        counts[base] = counts.get(base, 0) + 1
+        suffix = f"-{counts[base]}" if counts[base] > 1 else ""
+        sections.append(StructureSection(section_id=f"{base}{suffix}", label=normalized_label))
+    return sections
+
+
 class SongSpecData(BaseModel):
     theme: str | None = Field(default=None, max_length=1000)
     genre: list[str] | None = None
@@ -65,6 +95,7 @@ class SongSpecData(BaseModel):
     target_duration_seconds: int | None = Field(default=None, ge=30, le=900)
     mood_curve: dict[str, str] | None = None
     song_structure: list[str] | None = None
+    structure_sections: list[StructureSection] | None = None
 
     @field_validator("theme", "language", "key", "time_signature")
     @classmethod
@@ -102,12 +133,22 @@ class SongSpecData(BaseModel):
                 missing.append(field_name)
         return missing
 
+    @model_validator(mode="after")
+    def synchronize_structure_fields(self) -> "SongSpecData":
+        if self.structure_sections:
+            self.song_structure = [section.label for section in self.structure_sections]
+        elif self.song_structure:
+            self.structure_sections = build_structure_sections(self.song_structure)
+        return self
+
     def to_model_values(self) -> dict[str, Any]:
         return self.model_dump()
 
 
 class SongSpecGenerateRequest(BaseModel):
     intake_id: UUID
+    provider_profile_id: UUID | None = None
+    candidate_count: int | None = Field(default=None, ge=1, le=3)
 
 
 class SongSpecUpdate(BaseModel):

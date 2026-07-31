@@ -18,6 +18,14 @@ class AudioToMidiTaskQueue(Protocol):
     async def enqueue_audio_to_midi(self, run_id: UUID) -> str: ...
 
 
+class TextGenerationTaskQueue(Protocol):
+    async def enqueue_text_generation(self, run_id: UUID) -> str: ...
+
+
+class TextEvaluationTaskQueue(Protocol):
+    async def enqueue_text_evaluation(self, run_id: UUID) -> str: ...
+
+
 class ArqTaskQueue:
     def __init__(self, redis_url: str) -> None:
         self._redis_url = redis_url
@@ -56,6 +64,20 @@ class ArqTaskQueue:
             raise RuntimeError("Audio-to-MIDI job could not be enqueued")
         return str(job.job_id)
 
+    async def enqueue_text_generation(self, run_id: UUID) -> str:
+        pool = await self._get_pool()
+        job = await pool.enqueue_job("generate_text_candidates_job", str(run_id))
+        if job is None:
+            raise RuntimeError("Text candidate generation job could not be enqueued")
+        return str(job.job_id)
+
+    async def enqueue_text_evaluation(self, run_id: UUID) -> str:
+        pool = await self._get_pool()
+        job = await pool.enqueue_job("run_text_evaluation_job", str(run_id))
+        if job is None:
+            raise RuntimeError("Text evaluation job could not be enqueued")
+        return str(job.job_id)
+
 
 @lru_cache
 def get_arq_task_queue() -> ArqTaskQueue:
@@ -67,6 +89,14 @@ def get_demo_task_queue() -> DemoTaskQueue:
 
 
 def get_audio_to_midi_task_queue() -> AudioToMidiTaskQueue:
+    return get_arq_task_queue()
+
+
+def get_text_generation_task_queue() -> TextGenerationTaskQueue:
+    return get_arq_task_queue()
+
+
+def get_text_evaluation_task_queue() -> TextEvaluationTaskQueue:
     return get_arq_task_queue()
 
 

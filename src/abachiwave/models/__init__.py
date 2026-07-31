@@ -1,3 +1,12 @@
+from abachiwave.models.ai import (
+    EvaluationRun,
+    EvaluationRunStatus,
+    GenerationCandidate,
+    GenerationCandidateStatus,
+    PromptTemplateVersion,
+    ProviderProfile,
+    TextWorkflow,
+)
 from abachiwave.models.audio import AudioUpload, AudioUploadKind, AudioUploadStatus
 from abachiwave.models.comment import (
     ProjectComment,
@@ -31,6 +40,8 @@ from abachiwave.models.song_spec import (
     IdeaIntakeStatus,
     SongSpecStatus,
     SongSpecVersion,
+    StructureChangePreview,
+    StructureChangePreviewStatus,
 )
 
 __all__ = [
@@ -40,8 +51,12 @@ __all__ = [
     "AudioUploadKind",
     "AudioUploadStatus",
     "ChordProgressionVersion",
+    "EvaluationRun",
+    "EvaluationRunStatus",
     "ExportBundle",
     "ExportBundleStatus",
+    "GenerationCandidate",
+    "GenerationCandidateStatus",
     "GenerationRun",
     "GenerationRunStatus",
     "GenerationRunType",
@@ -56,9 +71,14 @@ __all__ = [
     "ProjectCommentTargetType",
     "ProjectEvent",
     "ProjectStatus",
+    "PromptTemplateVersion",
+    "ProviderProfile",
     "RevisionRequest",
     "RevisionRequestStatus",
     "RevisionTaskTarget",
     "SongSpecStatus",
     "SongSpecVersion",
+    "StructureChangePreview",
+    "StructureChangePreviewStatus",
+    "TextWorkflow",
 ]

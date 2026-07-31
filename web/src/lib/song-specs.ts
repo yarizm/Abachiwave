@@ -9,6 +9,11 @@ export type ClarificationQuestion = {
   required: boolean;
 };
 
+export type StructureSection = {
+  section_id: string;
+  label: string;
+};
+
 export type IdeaIntake = {
   intake_id: string;
   idea: string;
@@ -30,6 +35,7 @@ export type SongSpec = {
   target_duration_seconds: number | null;
   mood_curve: Record<string, string> | null;
   song_structure: string[] | null;
+  structure_sections?: StructureSection[] | null;
 };
 
 export type SongSpecVersion = {

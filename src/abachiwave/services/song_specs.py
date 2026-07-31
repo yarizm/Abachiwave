@@ -48,6 +48,7 @@ def song_spec_to_data(song_spec: SongSpecVersion) -> SongSpecData:
         target_duration_seconds=song_spec.target_duration_seconds,
         mood_curve=song_spec.mood_curve,
         song_structure=song_spec.song_structure,
+        structure_sections=song_spec.structure_sections,
     )
 
 
@@ -83,9 +84,7 @@ async def create_idea_intake(
         return None
     questions = build_clarification_questions(payload.idea, payload.answers)
     status = (
-        IdeaIntakeStatus.needs_clarification
-        if questions
-        else IdeaIntakeStatus.ready_for_generation
+        IdeaIntakeStatus.needs_clarification if questions else IdeaIntakeStatus.ready_for_generation
     )
     intake = IdeaIntake(
         project_id=str(project_id),
@@ -199,6 +198,8 @@ async def edit_song_spec_version(
         return None
     current_data = song_spec_to_data(current).model_dump()
     updates = payload.model_dump(exclude_unset=True)
+    if "song_structure" in updates:
+        current_data["structure_sections"] = None
     merged = SongSpecData(**{**current_data, **updates})
     return await _create_song_spec_version(
         session=session,
@@ -264,6 +265,7 @@ async def _create_song_spec_version(
     intake_id: UUID | None,
     data: SongSpecData,
     parent_version_id: UUID | None,
+    commit: bool = True,
 ) -> SongSpecVersion:
     version = await create_version_with_retry(
         session=session,
@@ -289,6 +291,7 @@ async def _create_song_spec_version(
         },
         artifact_version_id=UUID(version.id),
     )
-    await session.commit()
-    await session.refresh(version)
+    if commit:
+        await session.commit()
+        await session.refresh(version)
     return version

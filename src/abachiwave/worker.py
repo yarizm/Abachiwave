@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
@@ -8,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from abachiwave.core.config import get_settings
 from abachiwave.core.database import AsyncSessionLocal
 from abachiwave.models.demo import GenerationRun
+from abachiwave.services.ai_generation import execute_candidate_generation
 from abachiwave.services.audio import execute_audio_to_midi
 from abachiwave.services.demo import execute_demo_generation
+from abachiwave.services.evaluations import (
+    execute_text_evaluation,
+    mark_text_evaluation_failed,
+)
 from abachiwave.services.generation_runs import run_generation_with_timeout
 from abachiwave.services.task_queue import build_redis_settings
 
@@ -18,8 +24,10 @@ __all__ = [
     "build_redis_settings",
     "extract_midi_from_audio_job",
     "generate_demo_job",
+    "generate_text_candidates_job",
     "health_check",
     "load_generation_log_context",
+    "run_text_evaluation_job",
 ]
 
 GenerationExecutor = Callable[[UUID], Awaitable[GenerationRun | None]]
@@ -35,6 +43,35 @@ async def generate_demo_job(ctx: dict[str, Any], run_id: str) -> dict[str, str]:
 
 async def extract_midi_from_audio_job(ctx: dict[str, Any], run_id: str) -> dict[str, str]:
     return await _run_generation_job(run_id, execute_audio_to_midi, "audio_to_midi")
+
+
+async def generate_text_candidates_job(ctx: dict[str, Any], run_id: str) -> dict[str, str]:
+    return await _run_generation_job(run_id, execute_candidate_generation, "text_generation")
+
+
+async def run_text_evaluation_job(ctx: dict[str, Any], run_id: str) -> dict[str, str]:
+    settings = get_settings()
+    run_uuid = UUID(run_id)
+    logger = structlog.get_logger("abachiwave.worker")
+    logger.info("text_evaluation_started", evaluation_run_id=run_id)
+    try:
+        async with asyncio.timeout(settings.text_evaluation_timeout_seconds):
+            evaluation = await execute_text_evaluation(run_uuid)
+        status = "not_found" if evaluation is None else str(evaluation.status)
+        logger.info(
+            "text_evaluation_completed",
+            evaluation_run_id=run_id,
+            status=status,
+        )
+        return {"status": status}
+    except TimeoutError:
+        await mark_text_evaluation_failed(
+            run_uuid,
+            "evaluation_timeout",
+            "Text evaluation exceeded its configured timeout",
+        )
+        logger.error("text_evaluation_timed_out", evaluation_run_id=run_id)
+        return {"status": "failed"}
 
 
 async def load_generation_log_context(
@@ -85,6 +122,18 @@ async def _run_generation_job(
 
 
 class WorkerSettings:
-    functions = [health_check, generate_demo_job, extract_midi_from_audio_job]
+    functions = [
+        health_check,
+        generate_demo_job,
+        extract_midi_from_audio_job,
+        generate_text_candidates_job,
+        run_text_evaluation_job,
+    ]
     redis_settings = build_redis_settings(get_settings().redis_url)
-    job_timeout = get_settings().task_timeout_seconds + 30
+    job_timeout = (
+        max(
+            get_settings().task_timeout_seconds,
+            get_settings().text_evaluation_timeout_seconds,
+        )
+        + 30
+    )

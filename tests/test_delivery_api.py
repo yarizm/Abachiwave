@@ -126,6 +126,9 @@ async def test_arrangement_requires_complete_asset_chain(
         "midi_melody",
         "midi_hook",
     }
+    assert response.json()["detail"]["error_code"] == "prerequisites_missing"
+    assert response.json()["detail"]["hint"] == "check_prerequisites"
+    assert response.headers["X-Error-Code"] == "prerequisites_missing"
 
 
 @pytest.mark.asyncio

@@ -16,8 +16,10 @@ from abachiwave.models.composition import (
 )
 from abachiwave.models.song_spec import SongSpecVersion
 from abachiwave.schemas.composition import (
+    ChordPreviewRead,
     ChordProgressionVersionRead,
     ChordSection,
+    ChordTransposeRequest,
     ChordUpdate,
     HookCandidate,
     LyricSection,
@@ -26,6 +28,10 @@ from abachiwave.schemas.composition import (
     MidiAssetVersionRead,
 )
 from abachiwave.schemas.song_specs import SongSpecData
+from abachiwave.services.chord_theory import (
+    normalize_chord_sections,
+    transpose_chord_sections,
+)
 from abachiwave.services.events import add_project_event
 from abachiwave.services.midi import build_midi_bytes
 from abachiwave.services.song_specs import song_spec_to_data
@@ -46,6 +52,7 @@ def lyrics_version_to_read(version: LyricsVersion) -> LyricsVersionRead:
         source_revision_request_id=(
             UUID(version.source_revision_request_id) if version.source_revision_request_id else None
         ),
+        schema_version=version.schema_version,
         sections=[LyricSection.model_validate(section) for section in version.sections],
         hook_candidates=[
             HookCandidate.model_validate(candidate) for candidate in version.hook_candidates
@@ -56,6 +63,11 @@ def lyrics_version_to_read(version: LyricsVersion) -> LyricsVersionRead:
 
 
 def chord_progression_to_read(version: ChordProgressionVersion) -> ChordProgressionVersionRead:
+    sections = normalize_chord_sections(
+        [ChordSection.model_validate(section) for section in version.sections],
+        key_name=version.key,
+        time_signature=version.time_signature,
+    )
     return ChordProgressionVersionRead(
         id=UUID(version.id),
         project_id=UUID(version.project_id),
@@ -63,10 +75,11 @@ def chord_progression_to_read(version: ChordProgressionVersion) -> ChordProgress
         lyrics_version_id=UUID(version.lyrics_version_id) if version.lyrics_version_id else None,
         version_number=version.version_number,
         parent_version_id=UUID(version.parent_version_id) if version.parent_version_id else None,
+        schema_version=version.schema_version,
         key=version.key,
         tempo_bpm=version.tempo_bpm,
         time_signature=version.time_signature,
-        sections=[ChordSection.model_validate(section) for section in version.sections],
+        sections=sections,
         created_at=version.created_at,
         updated_at=version.updated_at,
     )
@@ -241,6 +254,80 @@ async def edit_chord_progression_version(
     )
 
 
+async def transpose_chord_progression_version(
+    session: AsyncSession,
+    project_id: UUID,
+    chord_version_id: UUID,
+    payload: ChordTransposeRequest,
+) -> ChordProgressionVersion | None:
+    current = await get_chord_progression_version(session, project_id, chord_version_id)
+    if current is None:
+        return None
+    current_sections = normalize_chord_sections(
+        [ChordSection.model_validate(section) for section in current.sections],
+        key_name=current.key,
+        time_signature=current.time_signature,
+    )
+    output_key, sections = transpose_chord_sections(
+        current_sections,
+        key_name=current.key,
+        time_signature=current.time_signature,
+        semitones=payload.semitones,
+        section_ids=set(payload.section_ids) if payload.section_ids else None,
+    )
+    version = await _create_chord_progression_version(
+        session=session,
+        project_id=project_id,
+        song_spec_id=UUID(current.song_spec_id),
+        lyrics_version_id=UUID(current.lyrics_version_id) if current.lyrics_version_id else None,
+        key=output_key,
+        tempo_bpm=current.tempo_bpm,
+        time_signature=current.time_signature,
+        sections=sections,
+        parent_version_id=UUID(current.id),
+        commit=False,
+    )
+    add_project_event(
+        session,
+        project_id=project_id,
+        event_type="chords.transposed",
+        payload={
+            "chord_version_id": version.id,
+            "source_chord_version_id": current.id,
+            "semitones": payload.semitones,
+            "section_ids": payload.section_ids,
+            "key": output_key,
+        },
+        artifact_version_id=UUID(version.id),
+    )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+async def preview_chord_progression(
+    session: AsyncSession,
+    project_id: UUID,
+    chord_version_id: UUID,
+    payload: ChordUpdate,
+) -> ChordPreviewRead | None:
+    current = await get_chord_progression_version(session, project_id, chord_version_id)
+    if current is None:
+        return None
+    sections = normalize_chord_sections(
+        payload.sections,
+        key_name=current.key,
+        time_signature=current.time_signature,
+    )
+    return ChordPreviewRead(
+        source_chord_id=UUID(current.id),
+        key=current.key,
+        tempo_bpm=current.tempo_bpm,
+        time_signature=current.time_signature,
+        sections=sections,
+    )
+
+
 async def get_midi_asset_version(
     session: AsyncSession,
     project_id: UUID,
@@ -392,6 +479,7 @@ async def _create_lyrics_version(
     hook_candidates: list[HookCandidate],
     parent_version_id: UUID | None,
     source_revision_request_id: UUID | None = None,
+    commit: bool = True,
 ) -> LyricsVersion:
     version = await create_version_with_retry(
         session=session,
@@ -405,7 +493,7 @@ async def _create_lyrics_version(
             source_revision_request_id=(
                 str(source_revision_request_id) if source_revision_request_id else None
             ),
-            sections=[section.model_dump() for section in sections],
+            sections=[section.model_dump(exclude_computed_fields=True) for section in sections],
             hook_candidates=[candidate.model_dump() for candidate in hook_candidates],
         ),
     )
@@ -420,8 +508,9 @@ async def _create_lyrics_version(
         },
         artifact_version_id=UUID(version.id),
     )
-    await session.commit()
-    await session.refresh(version)
+    if commit:
+        await session.commit()
+        await session.refresh(version)
     return version
 
 
@@ -436,7 +525,13 @@ async def _create_chord_progression_version(
     time_signature: str,
     sections: list[ChordSection],
     parent_version_id: UUID | None,
+    commit: bool = True,
 ) -> ChordProgressionVersion:
+    normalized_sections = normalize_chord_sections(
+        sections,
+        key_name=key,
+        time_signature=time_signature,
+    )
     version = await create_version_with_retry(
         session=session,
         project_id=project_id,
@@ -447,10 +542,11 @@ async def _create_chord_progression_version(
             lyrics_version_id=str(lyrics_version_id) if lyrics_version_id else None,
             version_number=version_number,
             parent_version_id=str(parent_version_id) if parent_version_id else None,
+            schema_version=2,
             key=key,
             tempo_bpm=tempo_bpm,
             time_signature=time_signature,
-            sections=[section.model_dump() for section in sections],
+            sections=[section.model_dump(mode="json") for section in normalized_sections],
         ),
     )
     add_project_event(
@@ -460,12 +556,13 @@ async def _create_chord_progression_version(
         payload={
             "chord_version_id": version.id,
             "version_number": version.version_number,
-            "section_count": len(sections),
+            "section_count": len(normalized_sections),
         },
         artifact_version_id=UUID(version.id),
     )
-    await session.commit()
-    await session.refresh(version)
+    if commit:
+        await session.commit()
+        await session.refresh(version)
     return version
 
 

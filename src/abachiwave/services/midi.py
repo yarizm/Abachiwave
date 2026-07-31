@@ -42,7 +42,7 @@ def build_midi_bytes(
     numerator, denominator = _parse_time_signature(song_spec.time_signature or "4/4")
     _add_meta_track(midi, tempo_bpm, numerator, denominator)
     if kind is MidiAssetKind.chord:
-        _add_chord_track(midi, chord_sections, numerator)
+        _add_chord_track(midi, chord_sections, numerator, denominator)
     elif kind is MidiAssetKind.hook:
         _add_hook_track(midi, song_spec, lyric_sections, numerator)
     else:
@@ -77,26 +77,39 @@ def _add_chord_track(
     midi: MidiFile,
     chord_sections: list[ChordSection],
     beats_per_bar: int,
+    beat_denominator: int,
 ) -> None:
     track = MidiTrack()
     track.append(MetaMessage("track_name", name="Chord Progression", time=0))
     track.append(Message("program_change", program=0, time=0))
-    bar_ticks = beats_per_bar * TICKS_PER_BEAT
+    beat_ticks = round(TICKS_PER_BEAT * 4 / beat_denominator)
+    bar_ticks = beats_per_bar * beat_ticks
+    timeline: list[tuple[int, int, Message]] = []
+    section_start = 0
     for section in chord_sections:
-        for chord in section.chords:
-            notes = _chord_to_notes(chord)
-            for note in notes:
-                track.append(Message("note_on", note=note, velocity=70, time=0))
-            for index, note in enumerate(notes):
-                track.append(
-                    Message(
-                        "note_off",
-                        note=note,
-                        velocity=0,
-                        time=bar_ticks if index == 0 else 0,
+        for measure in section.measures:
+            measure_start = section_start + (measure.measure_number - 1) * bar_ticks
+            for event in measure.events:
+                start_tick = measure_start + round((event.beat - 1) * beat_ticks)
+                end_tick = start_tick + max(1, round(event.duration_beats * beat_ticks))
+                for note in event.midi_notes:
+                    timeline.append(
+                        (start_tick, 1, Message("note_on", note=note, velocity=70, time=0))
                     )
-                )
-    track.append(MetaMessage("end_of_track", time=0))
+                    timeline.append(
+                        (end_tick, 0, Message("note_off", note=note, velocity=0, time=0))
+                    )
+        section_start += len(section.measures) * bar_ticks
+
+    last_tick = 0
+    for absolute_tick, _priority, message in sorted(
+        timeline,
+        key=lambda item: (item[0], item[1], item[2].note),
+    ):
+        message.time = max(0, absolute_tick - last_tick)
+        track.append(message)
+        last_tick = absolute_tick
+    track.append(MetaMessage("end_of_track", time=max(0, section_start - last_tick)))
     midi.tracks.append(track)
 
 
@@ -161,19 +174,3 @@ def _key_tonic(key: str) -> str:
     if key_match is None:
         return "C"
     return key_match.group(1).replace("b", "B")
-
-
-def _chord_to_notes(chord: str) -> list[int]:
-    chord_match = match(r"^\s*([A-Ga-g](?:#|b)?)(m|minor|dim)?", chord)
-    if chord_match is None:
-        return [60, 64, 67]
-    root_name = chord_match.group(1).replace("b", "B").upper()
-    quality = (chord_match.group(2) or "").lower()
-    root = 48 + NOTE_TO_SEMITONE.get(root_name, 0)
-    if quality == "dim":
-        intervals = (0, 3, 6)
-    elif quality in {"m", "minor"}:
-        intervals = (0, 3, 7)
-    else:
-        intervals = (0, 4, 7)
-    return [root + interval for interval in intervals]

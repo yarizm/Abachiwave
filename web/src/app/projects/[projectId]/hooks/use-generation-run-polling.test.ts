@@ -28,6 +28,8 @@ function run(
     provider_name: "local",
     provider_version: "1",
     provider_params: {},
+    provider_usage: {},
+    error_code: null,
     error_message: null,
     retry_of_run_id: null,
     demo_id: null,

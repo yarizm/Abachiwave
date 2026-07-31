@@ -36,13 +36,56 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         "project_comments",
         "revision_requests",
         "project_events",
+        "provider_profiles",
+        "prompt_template_versions",
+        "generation_candidates",
+        "evaluation_runs",
+        "structure_change_previews",
     }.issubset(tables)
+    with sqlite3.connect(db_path) as connection:
+        song_spec_columns = {
+            row[1] for row in connection.execute("pragma table_info(song_spec_versions)").fetchall()
+        }
+    assert "structure_sections" in song_spec_columns
+    with sqlite3.connect(db_path) as connection:
+        lyrics_columns = {
+            row[1] for row in connection.execute("pragma table_info(lyrics_versions)").fetchall()
+        }
+    assert "schema_version" in lyrics_columns
+    with sqlite3.connect(db_path) as connection:
+        chord_columns = {
+            row[1]
+            for row in connection.execute(
+                "pragma table_info(chord_progression_versions)"
+            ).fetchall()
+        }
+    assert "schema_version" in chord_columns
     with sqlite3.connect(db_path) as connection:
         demo_columns = {
             row[1]
             for row in connection.execute("pragma table_info(audio_demo_versions)").fetchall()
         }
     assert "waveform_peaks" in demo_columns
+    with sqlite3.connect(db_path) as connection:
+        run_columns = {
+            row[1] for row in connection.execute("pragma table_info(generation_runs)").fetchall()
+        }
+    assert {"provider_usage", "error_code"}.issubset(run_columns)
+    with sqlite3.connect(db_path) as connection:
+        evaluation_columns = {
+            row[1] for row in connection.execute("pragma table_info(evaluation_runs)").fetchall()
+        }
+    assert {
+        "workflow",
+        "status",
+        "arq_job_id",
+        "sample_count",
+        "error_code",
+        "error_message",
+        "started_at",
+        "completed_at",
+        "updated_at",
+    }.issubset(evaluation_columns)
     with sqlite3.connect(db_path) as connection:
         indexes = {
             row[0]
@@ -59,4 +102,8 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         "ix_generation_runs_project_created",
         "ix_audio_demo_versions_project_created",
         "ix_export_bundles_project_created",
+        "ix_generation_candidates_project_created",
+        "ix_evaluation_runs_workflow",
+        "ix_evaluation_runs_status",
+        "ix_structure_change_previews_project_created",
     }.issubset(indexes)

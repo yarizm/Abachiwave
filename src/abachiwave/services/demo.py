@@ -79,6 +79,7 @@ async def create_demo_generation_run(
         run.arq_job_id = await queue.enqueue_demo_generation(UUID(run.id))
     except Exception as exc:
         run.status = GenerationRunStatus.failed
+        run.error_code = "queue_enqueue_failed"
         run.error_message = str(exc)
         run.completed_at = datetime.now(UTC)
         await session.commit()
@@ -110,6 +111,7 @@ async def execute_demo_generation(
         try:
             run.status = GenerationRunStatus.running
             run.started_at = datetime.now(UTC)
+            run.error_code = None
             run.error_message = None
             await session.commit()
             await session.refresh(run)
@@ -143,6 +145,7 @@ async def execute_demo_generation(
                 await session.commit()
                 await session.refresh(run)
                 return run
+
             def build_demo(version_number: int) -> AudioDemoVersion:
                 demo_id = str(uuid4())
                 filename = f"demo-v{version_number}.wav"
@@ -187,6 +190,7 @@ async def execute_demo_generation(
             )
             run.status = GenerationRunStatus.succeeded
             run.completed_at = datetime.now(UTC)
+            run.error_code = None
             run.error_message = None
             add_project_event(
                 session,
@@ -210,6 +214,7 @@ async def execute_demo_generation(
             if failed_run.status == GenerationRunStatus.cancelled:
                 return failed_run
             failed_run.status = GenerationRunStatus.failed
+            failed_run.error_code = "demo_generation_failed"
             failed_run.error_message = str(exc)
             failed_run.completed_at = datetime.now(UTC)
             await session.commit()
@@ -310,6 +315,7 @@ async def cancel_generation_run(
         else str(previous_status)
     )
     run.status = GenerationRunStatus.cancelled
+    run.error_code = "task_cancelled"
     run.error_message = "cancelled by user"
     run.completed_at = datetime.now(UTC)
     add_project_event(
@@ -339,11 +345,11 @@ async def generation_run_to_read(
         provider_name=run.provider_name,
         provider_version=run.provider_version,
         provider_params=run.provider_params,
+        provider_usage=run.provider_usage,
+        error_code=run.error_code,
         error_message=run.error_message,
         retry_of_run_id=UUID(run.retry_of_run_id) if run.retry_of_run_id else None,
-        result_midi_asset_id=(
-            UUID(run.result_midi_asset_id) if run.result_midi_asset_id else None
-        ),
+        result_midi_asset_id=(UUID(run.result_midi_asset_id) if run.result_midi_asset_id else None),
         demo_id=demo_id,
         started_at=run.started_at,
         completed_at=run.completed_at,

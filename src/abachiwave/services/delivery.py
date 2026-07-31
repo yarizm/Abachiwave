@@ -213,7 +213,13 @@ async def resolve_arrangement_inputs(
             midi_assets.append(asset)
     else:
         midi_assets = list((await get_latest_midi_assets_by_kind(session, project_id)).values())
-    missing.extend(_missing_midi_kinds(midi_assets))
+    midi_by_kind = _latest_midi_by_kind(midi_assets)
+    missing = _missing_composition_prerequisites(
+        song_spec=song_spec,
+        lyrics=lyrics,
+        chords=chords,
+        midi_by_kind=midi_by_kind,
+    )
 
     if missing:
         return None, missing, None
@@ -224,7 +230,7 @@ async def resolve_arrangement_inputs(
             song_spec=song_spec,
             lyrics=lyrics,
             chords=chords,
-            midi_assets=_sort_midi_assets_for_export(midi_assets),
+            midi_assets=_sort_midi_assets_for_export(list(midi_by_kind.values())),
         ),
         [],
         None,
@@ -292,6 +298,15 @@ async def build_asset_tree(session: AsyncSession, project_id: UUID) -> AssetTree
     latest_chords = chord_versions[0] if chord_versions else None
     latest_midi_by_kind = _latest_midi_by_kind(midi_assets)
     latest_arrangement = arrangements[0] if arrangements else None
+    arrangement_midi_assets_by_id = (
+        await _get_midi_assets_by_ids(
+            session,
+            project_id,
+            latest_arrangement.midi_asset_ids,
+        )
+        if latest_arrangement
+        else {}
+    )
 
     current = CurrentAssets(
         song_spec=_song_spec_ref(approved_song_spec) if approved_song_spec else None,
@@ -321,6 +336,7 @@ async def build_asset_tree(session: AsyncSession, project_id: UUID) -> AssetTree
             chords=latest_chords,
             midi_by_kind=latest_midi_by_kind,
             arrangement=latest_arrangement,
+            arrangement_midi_assets_by_id=arrangement_midi_assets_by_id,
         ),
     )
 
@@ -571,6 +587,7 @@ async def _create_arrangement_plan_version(
     plan: ArrangementPlan,
     parent_version_id: UUID | None,
     source_revision_request_id: UUID | None = None,
+    commit: bool = True,
 ) -> ArrangementPlanVersion:
     version = await create_version_with_retry(
         session=session,
@@ -608,8 +625,9 @@ async def _create_arrangement_plan_version(
         },
         artifact_version_id=UUID(version.id),
     )
-    await session.commit()
-    await session.refresh(version)
+    if commit:
+        await session.commit()
+        await session.refresh(version)
     return version
 
 
@@ -644,15 +662,20 @@ async def _resolve_export_assets(
     )
     lyrics = await get_latest_lyrics_version(session, project_id)
     chords = await get_latest_chord_progression_version(session, project_id)
-    midi_assets = list((await get_latest_midi_assets_by_kind(session, project_id)).values())
-    missing: list[str] = []
-    if song_spec is None:
-        missing.append("approved_song_spec")
-    if lyrics is None:
-        missing.append("lyrics")
-    if chords is None:
-        missing.append("chords")
-    missing.extend(_missing_midi_kinds(midi_assets))
+    midi_by_kind = await get_latest_midi_assets_by_kind(session, project_id)
+    arrangement_midi_assets_by_id = await _get_midi_assets_by_ids(
+        session,
+        project_id,
+        arrangement.midi_asset_ids,
+    )
+    missing = _missing_export_prerequisites(
+        approved_song_spec=song_spec,
+        lyrics=lyrics,
+        chords=chords,
+        midi_by_kind=midi_by_kind,
+        arrangement=arrangement,
+        arrangement_midi_assets_by_id=arrangement_midi_assets_by_id,
+    )
     if missing:
         return None, missing, None
     if song_spec is None or lyrics is None or chords is None:
@@ -662,7 +685,7 @@ async def _resolve_export_assets(
             song_spec=song_spec,
             lyrics=lyrics,
             chords=chords,
-            midi_assets=_sort_midi_assets_for_export(midi_assets),
+            midi_assets=_sort_midi_assets_for_export(list(midi_by_kind.values())),
             arrangement=arrangement,
         ),
         [],
@@ -843,8 +866,7 @@ def _audio_upload_archive_path(upload: AudioUpload) -> str:
 
 def _archive_filename(filename: str) -> str:
     safe = "".join(
-        character if character.isalnum() or character in "._-" else "-"
-        for character in filename
+        character if character.isalnum() or character in "._-" else "-" for character in filename
     )
     return safe.strip(".-") or "asset.bin"
 
@@ -896,6 +918,21 @@ async def _list_midi_assets(session: AsyncSession, project_id: UUID) -> list[Mid
     return list(result.scalars().all())
 
 
+async def _get_midi_assets_by_ids(
+    session: AsyncSession,
+    project_id: UUID,
+    asset_ids: list[str],
+) -> dict[str, MidiAssetVersion]:
+    if not asset_ids:
+        return {}
+    statement: Select[tuple[MidiAssetVersion]] = select(MidiAssetVersion).where(
+        MidiAssetVersion.project_id == str(project_id),
+        MidiAssetVersion.id.in_(asset_ids),
+    )
+    result = await session.execute(statement)
+    return {asset.id: asset for asset in result.scalars().all()}
+
+
 def _latest_midi_by_kind(
     assets: Iterable[MidiAssetVersion],
 ) -> dict[MidiAssetKind, MidiAssetVersion]:
@@ -906,11 +943,6 @@ def _latest_midi_by_kind(
     return latest
 
 
-def _missing_midi_kinds(assets: list[MidiAssetVersion]) -> list[str]:
-    present = {MidiAssetKind(asset.kind) for asset in assets}
-    return [f"midi_{kind.value}" for kind in REQUIRED_MIDI_KINDS if kind not in present]
-
-
 def _missing_export_prerequisites(
     *,
     approved_song_spec: SongSpecVersion | None,
@@ -918,20 +950,74 @@ def _missing_export_prerequisites(
     chords: ChordProgressionVersion | None,
     midi_by_kind: dict[MidiAssetKind, MidiAssetVersion],
     arrangement: ArrangementPlanVersion | None,
+    arrangement_midi_assets_by_id: dict[str, MidiAssetVersion],
 ) -> list[str]:
-    missing: list[str] = []
-    if approved_song_spec is None:
-        missing.append("approved_song_spec")
-    if lyrics is None:
-        missing.append("lyrics")
-    if chords is None:
-        missing.append("chords")
-    missing.extend(
-        [f"midi_{kind.value}" for kind in REQUIRED_MIDI_KINDS if kind not in midi_by_kind]
+    missing = _missing_composition_prerequisites(
+        song_spec=approved_song_spec,
+        lyrics=lyrics,
+        chords=chords,
+        midi_by_kind=midi_by_kind,
     )
-    if arrangement is None:
+    if not _arrangement_matches_current_chain(
+        arrangement=arrangement,
+        song_spec=approved_song_spec,
+        midi_assets_by_id=arrangement_midi_assets_by_id,
+    ):
         missing.append("arrangement")
     return missing
+
+
+def _missing_composition_prerequisites(
+    *,
+    song_spec: SongSpecVersion | None,
+    lyrics: LyricsVersion | None,
+    chords: ChordProgressionVersion | None,
+    midi_by_kind: dict[MidiAssetKind, MidiAssetVersion],
+) -> list[str]:
+    missing: list[str] = []
+    if song_spec is None:
+        missing.append("approved_song_spec")
+    if not _lyrics_matches_song_spec(lyrics, song_spec):
+        missing.append("lyrics")
+    if not _asset_matches_song_spec(chords, song_spec):
+        missing.append("chords")
+    for kind in REQUIRED_MIDI_KINDS:
+        asset = midi_by_kind.get(kind)
+        if not _asset_matches_song_spec(asset, song_spec):
+            missing.append(f"midi_{kind.value}")
+    return missing
+
+
+def _lyrics_matches_song_spec(
+    lyrics: LyricsVersion | None,
+    song_spec: SongSpecVersion | None,
+) -> bool:
+    return lyrics is not None and song_spec is not None and lyrics.song_spec_id == song_spec.id
+
+
+def _asset_matches_song_spec(
+    asset: ChordProgressionVersion | MidiAssetVersion | None,
+    song_spec: SongSpecVersion | None,
+) -> bool:
+    return asset is not None and song_spec is not None and asset.song_spec_id == song_spec.id
+
+
+def _arrangement_matches_current_chain(
+    *,
+    arrangement: ArrangementPlanVersion | None,
+    song_spec: SongSpecVersion | None,
+    midi_assets_by_id: dict[str, MidiAssetVersion],
+) -> bool:
+    if arrangement is None or song_spec is None or arrangement.song_spec_id != song_spec.id:
+        return False
+    referenced_kinds: set[MidiAssetKind] = set()
+    for asset_id in arrangement.midi_asset_ids:
+        asset = midi_assets_by_id.get(asset_id)
+        if not _asset_matches_song_spec(asset, song_spec):
+            return False
+        if asset is not None:
+            referenced_kinds.add(MidiAssetKind(asset.kind))
+    return referenced_kinds == set(REQUIRED_MIDI_KINDS)
 
 
 def _sort_midi_assets_for_export(assets: list[MidiAssetVersion]) -> list[MidiAssetVersion]:
@@ -941,9 +1027,7 @@ def _sort_midi_assets_for_export(assets: list[MidiAssetVersion]) -> list[MidiAss
 
 def _song_spec_ref(version: SongSpecVersion) -> AssetReference:
     status = (
-        version.status.value
-        if isinstance(version.status, SongSpecStatus)
-        else str(version.status)
+        version.status.value if isinstance(version.status, SongSpecStatus) else str(version.status)
     )
     return AssetReference(
         asset_type="song_spec",

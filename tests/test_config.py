@@ -12,6 +12,7 @@ def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("READINESS_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("VERSION_WRITE_MAX_RETRIES", "4")
     monkeypatch.setenv("TASK_TIMEOUT_SECONDS", "240")
+    monkeypatch.setenv("TEXT_EVALUATION_TIMEOUT_SECONDS", "900")
     monkeypatch.setenv("MAX_PROJECT_UPLOADS", "12")
     monkeypatch.setenv("REQUEST_ID_HEADER", "X-Correlation-ID")
     get_settings.cache_clear()
@@ -25,6 +26,7 @@ def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     assert settings.readiness_timeout_seconds == 5
     assert settings.version_write_max_retries == 4
     assert settings.task_timeout_seconds == 240
+    assert settings.text_evaluation_timeout_seconds == 900
     assert settings.max_project_uploads == 12
     assert settings.request_id_header == "X-Correlation-ID"
     get_settings.cache_clear()

@@ -1,11 +1,16 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.errors import ErrorCode, ErrorHint, ProblemError
 from abachiwave.api.pagination import PageDependency
+from abachiwave.api.v1.ai import enqueue_candidate_generation_or_raise
 from abachiwave.core.database import get_session
+from abachiwave.models.ai import TextWorkflow
+from abachiwave.schemas.ai import CandidateGenerateRequest
+from abachiwave.schemas.demo import GenerationRunRead
 from abachiwave.schemas.handoff import ProjectHandoffRead
 from abachiwave.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from abachiwave.schemas.review import ProjectReviewRead
@@ -35,9 +40,17 @@ from abachiwave.services.song_specs import (
     project_exists,
     song_spec_to_read,
 )
+from abachiwave.services.task_queue import (
+    TextGenerationTaskQueue,
+    get_text_generation_task_queue,
+)
 
 router = APIRouter()
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+TextQueueDependency = Annotated[
+    TextGenerationTaskQueue,
+    Depends(get_text_generation_task_queue),
+]
 
 
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
@@ -130,12 +143,30 @@ async def get_latest_idea_intake_endpoint(
     return intake_to_read(intake) if intake else None
 
 
-@router.post("/{project_id}/song-spec/generate", response_model=SongSpecVersionRead)
+@router.post(
+    "/{project_id}/song-spec/generate",
+    response_model=SongSpecVersionRead | GenerationRunRead,
+)
 async def generate_song_spec_endpoint(
     project_id: UUID,
     payload: SongSpecGenerateRequest,
     session: SessionDependency,
-) -> SongSpecVersionRead:
+    queue: TextQueueDependency,
+    response: Response,
+) -> SongSpecVersionRead | GenerationRunRead:
+    if payload.provider_profile_id is not None or payload.candidate_count is not None:
+        response.status_code = status.HTTP_202_ACCEPTED
+        return await enqueue_candidate_generation_or_raise(
+            session=session,
+            project_id=project_id,
+            payload=CandidateGenerateRequest(
+                workflow=TextWorkflow.song_spec,
+                provider_profile_id=payload.provider_profile_id,
+                candidate_count=payload.candidate_count or 1,
+                intake_id=payload.intake_id,
+            ),
+            queue=queue,
+        )
     song_spec = await generate_song_spec_version(session, project_id, payload.intake_id)
     if song_spec is None:
         raise HTTPException(
@@ -185,8 +216,11 @@ async def approve_song_spec_version_endpoint(
     if song_spec is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SongSpec not found")
     if missing:
-        raise HTTPException(
+        raise ProblemError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            error_code=ErrorCode.SONG_SPEC_INCOMPLETE,
             detail={"message": "SongSpec is incomplete", "missing_required_fields": missing},
+            hint=ErrorHint.CHECK_REQUIRED_FIELDS,
+            fields={field: f"{field} is required" for field in missing},
         )
     return song_spec_to_read(song_spec)

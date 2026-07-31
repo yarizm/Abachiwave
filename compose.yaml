@@ -69,6 +69,11 @@ services:
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET: abachiwave-dev
       TASK_TIMEOUT_SECONDS: 120
+      TEXT_PROVIDER_API_BASE_URL: ${TEXT_PROVIDER_API_BASE_URL:-}
+      TEXT_PROVIDER_API_KEY: ${TEXT_PROVIDER_API_KEY:-}
+      TEXT_PROVIDER_MODEL: ${TEXT_PROVIDER_MODEL:-}
+      TEXT_PROVIDER_TIMEOUT_SECONDS: ${TEXT_PROVIDER_TIMEOUT_SECONDS:-60}
+      TEXT_EVALUATION_TIMEOUT_SECONDS: ${TEXT_EVALUATION_TIMEOUT_SECONDS:-600}
       MAX_PROJECT_UPLOADS: 100
       MAX_EXPORT_BUNDLE_BYTES: 536870912
       PYTHONPATH: /app/src
@@ -103,6 +108,11 @@ services:
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET: abachiwave-dev
       TASK_TIMEOUT_SECONDS: 120
+      TEXT_PROVIDER_API_BASE_URL: ${TEXT_PROVIDER_API_BASE_URL:-}
+      TEXT_PROVIDER_API_KEY: ${TEXT_PROVIDER_API_KEY:-}
+      TEXT_PROVIDER_MODEL: ${TEXT_PROVIDER_MODEL:-}
+      TEXT_PROVIDER_TIMEOUT_SECONDS: ${TEXT_PROVIDER_TIMEOUT_SECONDS:-60}
+      TEXT_EVALUATION_TIMEOUT_SECONDS: ${TEXT_EVALUATION_TIMEOUT_SECONDS:-600}
       MAX_PROJECT_UPLOADS: 100
       MAX_EXPORT_BUNDLE_BYTES: 536870912
       PYTHONPATH: /app/src
@@ -131,6 +141,7 @@ services:
     volumes:
       - ./web:/app
       - web_node_modules:/app/node_modules
+      - web_next_cache:/app/.next
     depends_on:
       api:
         condition: service_healthy
@@ -144,3 +155,4 @@ volumes:
   postgres_data:
   minio_data:
   web_node_modules:
+  web_next_cache:

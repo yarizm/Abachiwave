@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.errors import ErrorCode, ErrorHint, ProblemError
 from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.models.audio import AudioUploadKind
@@ -62,9 +63,11 @@ async def create_audio_upload_endpoint(
             storage=storage,
         )
     except AudioUploadTooLargeError as exc:
-        raise HTTPException(
+        raise ProblemError(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            error_code=ErrorCode.UPLOAD_TOO_LARGE,
             detail=str(exc),
+            hint=ErrorHint.TRIM_AUDIO_UNDER_25MB,
         ) from exc
     except AudioUploadLimitError as exc:
         raise HTTPException(
@@ -72,9 +75,11 @@ async def create_audio_upload_endpoint(
             detail=str(exc),
         ) from exc
     except UnsupportedAudioTypeError as exc:
-        raise HTTPException(
+        raise ProblemError(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            error_code=ErrorCode.UNSUPPORTED_MEDIA_TYPE,
             detail=str(exc),
+            hint=ErrorHint.CHECK_FORMAT,
         ) from exc
     if upload is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")

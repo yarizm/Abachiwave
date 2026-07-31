@@ -19,8 +19,8 @@ DiffableVersion = LyricsVersion | MidiAssetVersion | ArrangementPlanVersion | Au
 
 
 def build_lyrics_diff(left: LyricsVersion, right: LyricsVersion) -> VersionDiffRead:
-    left_sections = {section["section_id"]: section for section in left.sections}
-    right_sections = {section["section_id"]: section for section in right.sections}
+    left_sections = {str(section["section_id"]): section for section in left.sections}
+    right_sections = {str(section["section_id"]): section for section in right.sections}
     changes: list[VersionDiffChange] = []
     for section_id in sorted(set(left_sections) | set(right_sections)):
         left_text = str(left_sections.get(section_id, {}).get("text", ""))

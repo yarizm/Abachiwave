@@ -2,7 +2,17 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
@@ -18,6 +28,11 @@ class SongSpecStatus(StrEnum):
     draft = "draft"
     approved = "approved"
     superseded = "superseded"
+
+
+class StructureChangePreviewStatus(StrEnum):
+    pending = "pending"
+    applied = "applied"
 
 
 class IdeaIntake(Base):
@@ -103,6 +118,12 @@ class SongSpecVersion(Base):
     target_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mood_curve: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
     song_structure: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    structure_sections: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -113,4 +134,46 @@ class SongSpecVersion(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class StructureChangePreview(Base):
+    __tablename__ = "structure_change_previews"
+    __table_args__ = (
+        Index(
+            "ix_structure_change_previews_project_created",
+            "project_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_song_spec_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("song_spec_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    proposed_sections: Mapped[list[dict[str, str | None]]] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+    impact: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    status: Mapped[StructureChangePreviewStatus] = mapped_column(
+        String(16),
+        nullable=False,
+        default=StructureChangePreviewStatus.pending,
+        server_default=StructureChangePreviewStatus.pending.value,
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )

@@ -18,6 +18,8 @@ import {
   canGenerateArrangement,
   canGenerateComposition,
   canRetryRun,
+  chordPreviewEndpoint,
+  chordTransposeEndpoint,
   chordVersionEndpoint,
   chordsEndpoint,
   chordsGenerateEndpoint,
@@ -119,7 +121,26 @@ function lyrics(versionNumber: number): LyricsVersion {
     version_number: versionNumber,
     parent_version_id: null,
     source_revision_request_id: null,
-    sections: [{ section_id: "verse", label: "Verse", text: "Line one" }],
+    schema_version: 2,
+    sections: [
+      {
+        section_id: "verse",
+        label: "Verse",
+        text: "Line one",
+        lines: [
+          {
+            line_id: "line-1",
+            text: "Line one",
+            rhyme_label: null,
+            character_count: 7,
+            word_count: 2,
+            syllable_count: 2,
+            rhyme_key: "one",
+            stress_positions: [1],
+          },
+        ],
+      },
+    ],
     hook_candidates: [],
     created_at: "2026-07-08T00:00:00Z",
     updated_at: "2026-07-08T00:00:00Z",
@@ -134,10 +155,40 @@ function chords(versionNumber: number): ChordProgressionVersion {
     lyrics_version_id: null,
     version_number: versionNumber,
     parent_version_id: null,
+    schema_version: 2,
     key: "E major",
     tempo_bpm: 128,
     time_signature: "4/4",
-    sections: [{ section_id: "verse", label: "Verse", bars: 4, chords: ["E", "B", "C#m", "A"] }],
+    sections: [
+      {
+        section_id: "verse",
+        label: "Verse",
+        bars: 4,
+        chords: ["E", "B", "C#m", "A"],
+        measures: ["E", "B", "C#m", "A"].map((symbol, index) => ({
+          measure_number: index + 1,
+          events: [
+            {
+              event_id: `event-${index + 1}`,
+              measure: index + 1,
+              beat: 1,
+              duration_beats: 4,
+              symbol,
+              inversion: 0,
+              root: symbol.replace("m", ""),
+              bass: symbol.replace("m", ""),
+              quality: symbol.endsWith("m") ? "minor" : "major",
+              extensions: [],
+              pitch_classes: [],
+              midi_notes: [60, 64, 67],
+              roman_numeral: "I",
+              nashville_number: "1",
+              borrowed: false,
+            },
+          ],
+        })),
+      },
+    ],
     created_at: "2026-07-08T00:00:00Z",
     updated_at: "2026-07-08T00:00:00Z",
   };
@@ -238,6 +289,8 @@ function generationRun(status: GenerationRun["status"], createdAt: string): Gene
     provider_name: "local_deterministic_wav",
     provider_version: "0.1.0",
     provider_params: {},
+    provider_usage: {},
+    error_code: null,
     error_message: status === "failed" ? "failed" : null,
     retry_of_run_id: null,
     result_midi_asset_id: null,
@@ -375,6 +428,14 @@ test("composition endpoints build nested project URLs", () => {
   assert.equal(
     chordVersionEndpoint("http://localhost:8000", "p1", "c1"),
     "http://localhost:8000/api/v1/projects/p1/chords/c1",
+  );
+  assert.equal(
+    chordPreviewEndpoint("http://localhost:8000", "p1", "c1"),
+    "http://localhost:8000/api/v1/projects/p1/chords/c1/preview",
+  );
+  assert.equal(
+    chordTransposeEndpoint("http://localhost:8000", "p1", "c1"),
+    "http://localhost:8000/api/v1/projects/p1/chords/c1/transpose",
   );
   assert.equal(
     midiGenerateEndpoint("http://localhost:8000", "p1"),
@@ -567,11 +628,18 @@ test("composition version sorters put newest first", () => {
 
 test("composition form validators reject empty lyric and chord content", () => {
   assert.equal(validateLyricSections([]), "At least one lyric section is required.");
-  assert.equal(validateLyricSections([{ section_id: "verse", label: "Verse", text: "  " }]), "Lyric section text must not be empty.");
+  assert.equal(
+    validateLyricSections([
+      { section_id: "verse", label: "Verse", text: "", lines: [] },
+    ]),
+    "Each lyric section needs at least one line.",
+  );
   assert.equal(validateLyricSections(lyrics(1).sections), null);
   assert.equal(validateChordSections([]), "At least one chord section is required.");
   assert.equal(
-    validateChordSections([{ section_id: "verse", label: "Verse", bars: 0, chords: [] }]),
+    validateChordSections([
+      { section_id: "verse", label: "Verse", bars: 0, chords: [], measures: [] },
+    ]),
     "Chord sections need at least one bar and one chord.",
   );
   assert.equal(validateChordSections(chords(1).sections), null);

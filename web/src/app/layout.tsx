@@ -9,6 +9,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Abachiwave",
   description: "AI-assisted music creation workspace",
+  icons: { icon: "/icon.svg" },
 };
 
 export default async function RootLayout({

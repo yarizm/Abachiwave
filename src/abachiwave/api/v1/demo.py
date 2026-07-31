@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from abachiwave.api.errors import ErrorCode, ErrorHint, ProblemError
 from abachiwave.api.pagination import PageDependency
 from abachiwave.core.database import get_session
 from abachiwave.schemas.demo import AudioDemoVersionRead, DemoGenerateRequest, GenerationRunRead
@@ -50,9 +51,11 @@ async def generate_demo_endpoint(
     if result.not_found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result.not_found)
     if result.missing or result.run is None:
-        raise HTTPException(
+        raise ProblemError(
             status_code=status.HTTP_409_CONFLICT,
+            error_code=ErrorCode.PREREQUISITES_MISSING,
             detail={"message": "Demo prerequisites are missing", "missing": result.missing},
+            hint=ErrorHint.CHECK_PREREQUISITES,
         )
     return await generation_run_to_read(session, result.run)
 
@@ -155,9 +158,11 @@ async def retry_task_endpoint(
     if not_found_or_conflict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_or_conflict)
     if missing or run is None:
-        raise HTTPException(
+        raise ProblemError(
             status_code=status.HTTP_409_CONFLICT,
+            error_code=ErrorCode.PREREQUISITES_MISSING,
             detail={"message": "Demo prerequisites are missing", "missing": missing},
+            hint=ErrorHint.CHECK_PREREQUISITES,
         )
     return await generation_run_to_read(session, run)
 

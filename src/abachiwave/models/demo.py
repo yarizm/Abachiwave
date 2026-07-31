@@ -29,13 +29,12 @@ class GenerationRunStatus(StrEnum):
 class GenerationRunType(StrEnum):
     demo_generation = "demo_generation"
     audio_to_midi = "audio_to_midi"
+    text_generation = "text_generation"
 
 
 class GenerationRun(Base):
     __tablename__ = "generation_runs"
-    __table_args__ = (
-        Index("ix_generation_runs_project_created", "project_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_generation_runs_project_created", "project_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
@@ -62,6 +61,13 @@ class GenerationRun(Base):
     provider_name: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_version: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_params: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    provider_usage: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_of_run_id: Mapped[str | None] = mapped_column(
         String(36),

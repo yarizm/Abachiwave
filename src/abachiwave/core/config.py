@@ -43,6 +43,30 @@ class Settings(BaseSettings):
         le=3600,
         validation_alias="TASK_TIMEOUT_SECONDS",
     )
+    text_provider_api_base_url: str | None = Field(
+        None,
+        validation_alias="TEXT_PROVIDER_API_BASE_URL",
+    )
+    text_provider_api_key: str | None = Field(
+        None,
+        validation_alias="TEXT_PROVIDER_API_KEY",
+    )
+    text_provider_model: str | None = Field(
+        None,
+        validation_alias="TEXT_PROVIDER_MODEL",
+    )
+    text_provider_timeout_seconds: float = Field(
+        60.0,
+        gt=0,
+        le=300,
+        validation_alias="TEXT_PROVIDER_TIMEOUT_SECONDS",
+    )
+    text_evaluation_timeout_seconds: int = Field(
+        600,
+        ge=30,
+        le=7200,
+        validation_alias="TEXT_EVALUATION_TIMEOUT_SECONDS",
+    )
     max_project_uploads: int = Field(
         100,
         ge=1,
@@ -78,12 +102,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_default_production_storage_credentials(self) -> "Settings":
         if self.app_env == "production" and (
-            self.s3_access_key_id == "minioadmin"
-            or self.s3_secret_access_key == "minioadmin"
+            self.s3_access_key_id == "minioadmin" or self.s3_secret_access_key == "minioadmin"
         ):
-            raise ValueError(
-                "production requires non-default object storage credentials"
-            )
+            raise ValueError("production requires non-default object storage credentials")
         return self
 
 

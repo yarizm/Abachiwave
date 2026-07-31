@@ -1,11 +1,14 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from abachiwave.api.pagination import PageDependency
+from abachiwave.api.v1.ai import enqueue_candidate_generation_or_raise
 from abachiwave.core.database import get_session
+from abachiwave.models.ai import TextWorkflow
+from abachiwave.schemas.ai import CandidateGenerateRequest
 from abachiwave.schemas.demo import GenerationRunRead
 from abachiwave.schemas.revisions import (
     ProjectEventRead,
@@ -32,24 +35,48 @@ from abachiwave.services.revisions import (
 )
 from abachiwave.services.song_specs import project_exists
 from abachiwave.services.storage import ObjectStorage, get_object_storage
-from abachiwave.services.task_queue import DemoTaskQueue, get_demo_task_queue
+from abachiwave.services.task_queue import (
+    DemoTaskQueue,
+    TextGenerationTaskQueue,
+    get_demo_task_queue,
+    get_text_generation_task_queue,
+)
 
 router = APIRouter()
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 StorageDependency = Annotated[ObjectStorage, Depends(get_object_storage)]
 QueueDependency = Annotated[DemoTaskQueue, Depends(get_demo_task_queue)]
+TextQueueDependency = Annotated[
+    TextGenerationTaskQueue,
+    Depends(get_text_generation_task_queue),
+]
 
 
 @router.post(
     "/{project_id}/revisions",
-    response_model=RevisionRequestRead,
+    response_model=RevisionRequestRead | GenerationRunRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_revision_endpoint(
     project_id: UUID,
     payload: RevisionRequestCreate,
     session: SessionDependency,
-) -> RevisionRequestRead:
+    queue: TextQueueDependency,
+    response: Response,
+) -> RevisionRequestRead | GenerationRunRead:
+    if payload.provider_profile_id is not None or payload.candidate_count is not None:
+        response.status_code = status.HTTP_202_ACCEPTED
+        return await enqueue_candidate_generation_or_raise(
+            session=session,
+            project_id=project_id,
+            payload=CandidateGenerateRequest(
+                workflow=TextWorkflow.revision,
+                provider_profile_id=payload.provider_profile_id,
+                candidate_count=payload.candidate_count or 1,
+                feedback=payload.feedback,
+            ),
+            queue=queue,
+        )
     revision = await create_revision_request(session, project_id, payload.feedback)
     if revision is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")

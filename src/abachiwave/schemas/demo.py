@@ -22,6 +22,8 @@ class GenerationRunRead(BaseModel):
     provider_name: str
     provider_version: str
     provider_params: dict[str, object]
+    provider_usage: dict[str, object]
+    error_code: str | None
     error_message: str | None
     retry_of_run_id: UUID | None
     result_midi_asset_id: UUID | None

@@ -11,7 +11,14 @@ export type WorkspaceActionDomain =
   | "demo"
   | "revision"
   | "collaboration"
-  | "tasks";
+  | "tasks"
+  | "ai"
+  | "structure"
+  | "lyrics"
+  | "lyricsRewrite"
+  | "chords"
+  | "chordsPreview"
+  | "chordsTranspose";
 
 export function usePendingActions() {
   const [counts, setCounts] = useState<Partial<Record<WorkspaceActionDomain, number>>>({});

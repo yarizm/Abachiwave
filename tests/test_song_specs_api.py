@@ -112,6 +112,9 @@ async def test_incomplete_song_spec_cannot_be_approved(client: AsyncClient) -> N
 
     assert approve_response.status_code == 422
     assert "missing_required_fields" in approve_response.json()["detail"]
+    assert approve_response.json()["detail"]["error_code"] == "song_spec_incomplete"
+    assert approve_response.headers["X-Error-Code"] == "song_spec_incomplete"
+    assert approve_response.json()["fields"]
 
 
 @pytest.mark.asyncio

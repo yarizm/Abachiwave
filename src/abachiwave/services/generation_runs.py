@@ -42,6 +42,7 @@ async def mark_generation_run_failed(
         if run.status not in {GenerationRunStatus.queued, GenerationRunStatus.running}:
             return run
         run.status = GenerationRunStatus.failed
+        run.error_code = "task_timeout"
         run.error_message = error_message
         run.completed_at = datetime.now(UTC)
         await session.commit()

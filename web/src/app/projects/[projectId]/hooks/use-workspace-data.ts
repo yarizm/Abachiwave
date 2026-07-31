@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useGenerationRunPolling } from "./use-generation-run-polling";
 
 import { useLocale } from "@/i18n/locale-provider";
+import type { GenerationCandidate, ProviderCapability } from "@/lib/ai-generation";
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
@@ -44,6 +45,8 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
   const [projectHandoff, setProjectHandoff] = useState<ProjectHandoff | null>(null);
   const [projectReview, setProjectReview] = useState<ProjectReview | null>(null);
   const [audioUploads, setAudioUploads] = useState<AudioUpload[]>([]);
+  const [providerProfiles, setProviderProfiles] = useState<ProviderCapability[]>([]);
+  const [candidates, setCandidates] = useState<GenerationCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +72,8 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setProjectHandoff(snapshot.projectHandoff);
       setProjectReview(snapshot.projectReview);
       setAudioUploads(snapshot.audioUploads);
+      setProviderProfiles(snapshot.providerProfiles);
+      setCandidates(snapshot.candidates);
     } catch (loadError) {
       setError(errorMessage(loadError, "Failed to load workspace"));
     } finally {
@@ -129,6 +134,10 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
     setProjectReview,
     audioUploads,
     setAudioUploads,
+    providerProfiles,
+    setProviderProfiles,
+    candidates,
+    setCandidates,
     isLoading,
     error,
     setError,

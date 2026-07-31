@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { expect, Locator, Page, test } from "@playwright/test";
@@ -13,7 +14,7 @@ test.describe("project workspace", () => {
   let project: Project;
 
   test.beforeEach(async ({ request }, testInfo) => {
-    const name = `E2E ${testInfo.project.name} ${Date.now()}`;
+    const name = `E2E ${testInfo.project.name} ${randomUUID()}`;
     const response = await request.post(`${apiBaseUrl}/api/v1/projects`, {
       data: { name, description: "Playwright workspace baseline" },
     });
@@ -27,6 +28,7 @@ test.describe("project workspace", () => {
     }
     await request.patch(`${apiBaseUrl}/api/v1/projects/${project.id}`, {
       data: { status: "archived" },
+      maxRetries: 2,
     });
   });
 
@@ -76,8 +78,8 @@ test.describe("project workspace", () => {
     await expect(page.getByRole("heading", { name: "灵感输入" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "SongSpec 编辑器" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "音频" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "歌词" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "和弦" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "歌词编辑器" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "和弦编辑器" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "编曲方案" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "导出" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "修改请求" })).toBeVisible();
@@ -175,20 +177,104 @@ test.describe("project workspace", () => {
       await expect(approveButton).toBeEnabled();
       await runApiAction(page, approveButton, "POST", "/approve", 200);
 
-      await runApiAction(
+      const lyricsResponse = await runApiAction(
         page,
         page.getByRole("button", { name: "Generate lyrics" }),
         "POST",
         `/api/v1/projects/${browserProjectId}/lyrics/generate`,
         201,
       );
+      const generatedLyricsId = ((await lyricsResponse.json()) as { id: string }).id;
+      const lyricsPanel = page.locator("section[aria-labelledby='lyrics-title']");
+      await expect(lyricsPanel.getByRole("heading", { name: "Lyrics editor" })).toBeVisible();
+      const firstLyricLine = lyricsPanel.locator(".lyric-line-content textarea").first();
+      const originalLyricLine = await firstLyricLine.inputValue();
+      const editedLyricLine = `${originalLyricLine} beneath the moonlit wires`;
+      await firstLyricLine.fill(editedLyricLine);
+      await expect(lyricsPanel.getByText("Unsaved", { exact: true })).toBeVisible();
+      const lyricsUndoButton = lyricsPanel.getByRole("button", { name: "Undo" });
+      await expect(lyricsUndoButton).toBeEnabled();
+      await lyricsUndoButton.click();
+      await expect(firstLyricLine).toHaveValue(originalLyricLine);
+      await lyricsPanel.getByRole("button", { name: "Redo" }).click();
+      await expect(firstLyricLine).toHaveValue(editedLyricLine);
+      await lyricsPanel
+        .getByRole("textbox", { name: "Direction" })
+        .fill("bring the night road into sharper focus");
       await runApiAction(
+        page,
+        lyricsPanel.getByRole("button", { name: "Preview rewrite" }),
+        "POST",
+        "/rewrite",
+        200,
+        `/api/v1/projects/${browserProjectId}/lyrics/`,
+      );
+      await expect(
+        lyricsPanel.getByRole("heading", { name: "Original / candidate diff" }),
+      ).toBeVisible();
+      await lyricsPanel.getByRole("button", { name: "Accept line" }).first().click();
+      await runApiAction(
+        page,
+        lyricsPanel.getByRole("button", { name: "Save lyrics version" }),
+        "PATCH",
+        `/api/v1/projects/${browserProjectId}/lyrics/${generatedLyricsId}`,
+        200,
+      );
+      await expect(lyricsPanel.locator(".badge")).toHaveText("v2");
+      const chordsResponse = await runApiAction(
         page,
         page.getByRole("button", { name: "Generate chords" }),
         "POST",
         `/api/v1/projects/${browserProjectId}/chords/generate`,
         201,
       );
+      const generatedChordsId = ((await chordsResponse.json()) as { id: string }).id;
+      const chordsPanel = page.locator("section[aria-labelledby='chords-title']");
+      await expect(chordsPanel.getByRole("heading", { name: "Chord editor" })).toBeVisible();
+      const firstChord = chordsPanel.getByRole("textbox", { name: "Chord symbol in measure 1" }).first();
+      const originalChord = await firstChord.inputValue();
+      await firstChord.fill("Emaj7");
+      await expect(chordsPanel.getByText("Unsaved", { exact: true })).toBeVisible();
+      await chordsPanel.getByRole("button", { name: "Undo" }).click();
+      await expect(firstChord).toHaveValue(originalChord);
+      await chordsPanel.getByRole("button", { name: "Redo" }).click();
+      await expect(firstChord).toHaveValue("Emaj7");
+      await runApiAction(
+        page,
+        chordsPanel.getByRole("button", { name: "Validate" }),
+        "POST",
+        `/api/v1/projects/${browserProjectId}/chords/${generatedChordsId}/preview`,
+        200,
+      );
+      await chordsPanel.getByRole("button", { name: "Roman" }).click();
+      await expect(chordsPanel.getByText("I7", { exact: true }).first()).toBeVisible();
+      const editedChordsResponse = await runApiAction(
+        page,
+        chordsPanel.getByRole("button", { name: "Save chords version" }),
+        "PATCH",
+        `/api/v1/projects/${browserProjectId}/chords/${generatedChordsId}`,
+        200,
+      );
+      const editedChordsId = ((await editedChordsResponse.json()) as { id: string }).id;
+      await expect(chordsPanel.locator(".badge")).toHaveText("v2");
+      await runApiAction(
+        page,
+        chordsPanel.getByRole("button", { name: "Audition" }),
+        "POST",
+        `/api/v1/projects/${browserProjectId}/chords/${editedChordsId}/preview`,
+        200,
+      );
+      await expect(chordsPanel.getByRole("button", { name: "Stop" })).toBeVisible();
+      await chordsPanel.getByRole("button", { name: "Stop" }).click();
+      await runApiAction(
+        page,
+        chordsPanel.getByRole("button", { name: "Create transposed version" }),
+        "POST",
+        `/api/v1/projects/${browserProjectId}/chords/${editedChordsId}/transpose`,
+        201,
+      );
+      await expect(chordsPanel.locator(".badge")).toHaveText("v3");
+      await expect(chordsPanel.locator(".chord-facts")).toContainText("F# major");
       await runApiAction(
         page,
         page.getByRole("button", { name: "Generate MIDI" }),
@@ -349,6 +435,7 @@ test.describe("project workspace", () => {
       if (browserProjectId) {
         await request.patch(`${apiBaseUrl}/api/v1/projects/${browserProjectId}`, {
           data: { status: "archived" },
+          maxRetries: 2,
         });
       }
     }

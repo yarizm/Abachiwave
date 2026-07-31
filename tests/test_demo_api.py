@@ -164,6 +164,8 @@ async def test_demo_generation_requires_arrangement(
 
     assert response.status_code == 409
     assert response.json()["detail"]["missing"] == ["arrangement"]
+    assert response.json()["detail"]["error_code"] == "prerequisites_missing"
+    assert response.headers["X-Error-Code"] == "prerequisites_missing"
 
 
 @pytest.mark.asyncio

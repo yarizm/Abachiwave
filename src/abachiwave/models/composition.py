@@ -64,7 +64,13 @@ class LyricsVersion(Base):
         nullable=True,
         index=True,
     )
-    sections: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False)
+    schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="2",
+    )
+    sections: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
     hook_candidates: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -113,6 +119,12 @@ class ChordProgressionVersion(Base):
         String(36),
         ForeignKey("chord_progression_versions.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="2",
     )
     key: Mapped[str] = mapped_column(String(64), nullable=False)
     tempo_bpm: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -265,9 +277,7 @@ class ArrangementPlanVersion(Base):
 
 class ExportBundle(Base):
     __tablename__ = "export_bundles"
-    __table_args__ = (
-        Index("ix_export_bundles_project_created", "project_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_export_bundles_project_created", "project_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
