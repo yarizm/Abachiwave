@@ -17,13 +17,20 @@ type PersistedStructureDraft = {
   sections: StructureSectionDraft[];
 };
 
+export function structureDraftStorageKey(projectId: string, sourceId: string | null): string {
+  // Per-version keys keep each version's unsaved draft when the user switches
+  // versions; a single project-scoped key was cleared by the clean baseline of
+  // the newly selected version, destroying the previous draft.
+  return `abachiwave:structure-draft:${projectId}:${sourceId ?? "none"}`;
+}
+
 export function useStructureDraft(projectId: string, sourceVersion: SongSpecVersion | null) {
   const sourceId = sourceVersion?.id ?? null;
   const baseline = useMemo(
     () => sourceVersion?.song_spec.structure_sections ?? [],
     [sourceVersion],
   );
-  const storageKey = `abachiwave:structure-draft:${projectId}`;
+  const storageKey = structureDraftStorageKey(projectId, sourceId);
   const [history, setHistory] = useState(() => createStructureHistory([]));
   const [initialized, setInitialized] = useState(false);
   const [restored, setRestored] = useState(false);

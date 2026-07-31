@@ -20,6 +20,13 @@ type PersistedChordDraft = {
   draft: ChordDraft;
 };
 
+export function chordDraftStorageKey(projectId: string, sourceId: string | null): string {
+  // Per-version keys keep each version's unsaved draft when the user switches
+  // versions; a single project-scoped key was cleared by the clean baseline of
+  // the newly selected version, destroying the previous draft.
+  return `abachiwave:chord-draft:${projectId}:${sourceId ?? "none"}`;
+}
+
 export function useChordDraft(projectId: string, sourceVersion: ChordProgressionVersion | null) {
   const sourceId = sourceVersion?.id ?? null;
   const baselineRef = useRef({
@@ -30,7 +37,7 @@ export function useChordDraft(projectId: string, sourceVersion: ChordProgression
     baselineRef.current = { sourceId, draft: draftFromChordVersion(sourceVersion) };
   }
   const baseline = baselineRef.current.draft;
-  const storageKey = `abachiwave:chord-draft:${projectId}`;
+  const storageKey = chordDraftStorageKey(projectId, sourceId);
   const [history, setHistory] = useState(() => createChordHistory(baseline));
   const [initialized, setInitialized] = useState(false);
   const [restored, setRestored] = useState(false);

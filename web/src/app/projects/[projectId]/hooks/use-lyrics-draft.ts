@@ -19,6 +19,13 @@ type PersistedLyricsDraft = {
   draft: LyricsDraft;
 };
 
+export function lyricsDraftStorageKey(projectId: string, sourceId: string | null): string {
+  // Per-version keys keep each version's unsaved draft when the user switches
+  // versions; a single project-scoped key was cleared by the clean baseline of
+  // the newly selected version, destroying the previous draft.
+  return `abachiwave:lyrics-draft:${projectId}:${sourceId ?? "none"}`;
+}
+
 export function useLyricsDraft(projectId: string, sourceVersion: LyricsVersion | null) {
   const sourceId = sourceVersion?.id ?? null;
   const baselineRef = useRef({
@@ -29,7 +36,7 @@ export function useLyricsDraft(projectId: string, sourceVersion: LyricsVersion |
     baselineRef.current = { sourceId, draft: draftFromLyricsVersion(sourceVersion) };
   }
   const baseline = baselineRef.current.draft;
-  const storageKey = `abachiwave:lyrics-draft:${projectId}`;
+  const storageKey = lyricsDraftStorageKey(projectId, sourceId);
   const [history, setHistory] = useState(() => createLyricsHistory(baseline));
   const [initialized, setInitialized] = useState(false);
   const [restored, setRestored] = useState(false);
