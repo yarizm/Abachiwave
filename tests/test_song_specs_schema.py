@@ -1,6 +1,11 @@
 from pydantic import ValidationError
 
-from abachiwave.schemas.song_specs import IdeaIntakeCreate, SongSpecData
+from abachiwave.schemas.song_specs import (
+    IdeaIntakeCreate,
+    SongSpecData,
+    build_structure_sections,
+    canonical_section_slug,
+)
 
 
 def test_song_spec_reports_missing_required_fields() -> None:
@@ -25,3 +30,16 @@ def test_idea_intake_normalizes_answers() -> None:
 
     assert payload.idea == "Night song"
     assert payload.answers == {"key": "E major"}
+
+
+def test_canonical_section_slug_normalizes_legacy_ids() -> None:
+    assert canonical_section_slug("pre chorus") == "pre-chorus"
+    assert canonical_section_slug("pre_chorus") == "pre-chorus"
+    assert canonical_section_slug("  Chorus ") == "chorus"
+    assert canonical_section_slug("预副歌") == "section"
+
+
+def test_build_structure_sections_keeps_dedup_suffix() -> None:
+    sections = build_structure_sections(["pre chorus", "chorus", "chorus"])
+
+    assert [section.section_id for section in sections] == ["pre-chorus", "chorus", "chorus-2"]

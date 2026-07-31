@@ -8,7 +8,7 @@ from abachiwave.schemas.composition import (
     HookCandidate,
     LyricSection,
 )
-from abachiwave.schemas.song_specs import SongSpecData
+from abachiwave.schemas.song_specs import SongSpecData, canonical_section_slug
 
 MAJOR_SCALE_STEPS = (0, 2, 4, 5, 7, 9, 11)
 MINOR_SCALE_STEPS = (0, 2, 3, 5, 7, 8, 10)
@@ -152,9 +152,9 @@ def _instruments_for_section(section_id: str, genre_text: str) -> list[str]:
         base = ["lead vocal", "sub bass", "drum machine"]
     if "intro" in section_id:
         return ["filtered keys", "ambient guitar", "soft pulse"]
-    if "verse" in section_id and "pre_chorus" not in section_id:
+    if "verse" in section_id and "pre-chorus" not in section_id:
         return [*base, "muted guitar", "warm pad"]
-    if "pre_chorus" in section_id:
+    if "pre-chorus" in section_id:
         return [*base, "rising synth", "picked guitar"]
     if "chorus" in section_id:
         return [*base, "wide guitars", "stacked hook synth", "backing vocals"]
@@ -168,11 +168,11 @@ def _instruments_for_section(section_id: str, genre_text: str) -> list[str]:
 def _energy_for_section(section_id: str) -> int:
     if "intro" in section_id or "outro" in section_id:
         return 3
-    if "verse" in section_id and "pre_chorus" not in section_id:
+    if "verse" in section_id and "pre-chorus" not in section_id:
         return 4
-    if "pre_chorus" in section_id:
+    if "pre-chorus" in section_id:
         return 6
-    if "final_chorus" in section_id:
+    if "final-chorus" in section_id:
         return 9
     if "chorus" in section_id:
         return 8
@@ -198,7 +198,7 @@ def _production_notes_for_section(
 
 def _progression_for_section(section: str, chord_map: dict[str, str]) -> list[str]:
     section_id = _section_id(section)
-    if "pre_chorus" in section_id:
+    if "pre-chorus" in section_id:
         degrees = ("IV", "V", "vi", "V")
     elif "chorus" in section_id:
         degrees = ("I", "V", "vi", "IV")
@@ -253,9 +253,8 @@ def _format_chord(semitone: int, *, minor: bool) -> str:
 
 
 def _section_id(section: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", "_", section.lower()).strip("_")
-    return normalized or "section"
+    return canonical_section_slug(section)
 
 
 def _section_label(section: str) -> str:
-    return _section_id(section).replace("_", " ").title()
+    return _section_id(section).replace("_", " ").replace("-", " ").title()

@@ -68,16 +68,27 @@ class StructureSection(BaseModel):
         return normalized
 
 
+def canonical_section_slug(value: str) -> str:
+    """Lowercase hyphen slug shared by generation and remapping.
+
+    Legacy underscore ids ("pre_chorus") and hyphen ids ("pre-chorus")
+    normalize to the same key. Empty results fall back to "section".
+    """
+    base = "".join(
+        character if character.isascii() and character.isalnum() else "-"
+        for character in value.strip().lower()
+    )
+    return "-".join(part for part in base.split("-") if part) or "section"
+
+
 def build_structure_sections(labels: list[str]) -> list[StructureSection]:
     sections: list[StructureSection] = []
     counts: dict[str, int] = {}
     for index, label in enumerate(labels):
         normalized_label = label.strip()
-        base = "".join(
-            character if character.isascii() and character.isalnum() else "-"
-            for character in normalized_label.lower()
-        )
-        base = "-".join(part for part in base.split("-") if part) or f"section-{index + 1}"
+        base = canonical_section_slug(normalized_label)
+        if not any(character.isascii() and character.isalnum() for character in normalized_label):
+            base = f"section-{index + 1}"
         base = base[:56]
         counts[base] = counts.get(base, 0) + 1
         suffix = f"-{counts[base]}" if counts[base] > 1 else ""

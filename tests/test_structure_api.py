@@ -1,13 +1,16 @@
 from collections.abc import AsyncIterator
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from abachiwave.models.composition import LyricsVersion
+from abachiwave.schemas.structure import StructureSectionInput
 from abachiwave.services.storage import get_object_storage
+from abachiwave.services.structure import _remap_lyrics
 
 
 class MemoryStorage:
@@ -280,3 +283,30 @@ async def test_structure_rejects_noop_preview(structure_client: AsyncClient) -> 
     assert response.status_code == 409
     versions = (await structure_client.get(f"/api/v1/projects/{project_id}/song-specs")).json()
     assert len(versions) == 1
+
+
+def test_remap_lyrics_matches_legacy_underscore_section_ids() -> None:
+    """Legacy sections slugged with underscores must still match hyphen targets
+    from build_structure_sections when the structure change is applied."""
+    version = LyricsVersion(
+        id=str(uuid4()),
+        project_id=str(uuid4()),
+        song_spec_id=str(uuid4()),
+        version_number=1,
+        sections=[
+            {
+                "section_id": "pre_chorus",
+                "label": "Pre Chorus",
+                "text": "hello",
+                "lines": [{"line_id": "line-1", "text": "hello", "rhyme_label": None}],
+            }
+        ],
+        hook_candidates=[],
+    )
+    targets = [StructureSectionInput(section_id="pre-chorus", label="Pre-Chorus")]
+
+    remapped = _remap_lyrics(version, targets)
+
+    assert remapped[0].section_id == "pre-chorus"
+    assert remapped[0].text == "hello"
+    assert "Draft pending" not in remapped[0].text

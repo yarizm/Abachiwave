@@ -28,7 +28,11 @@ from abachiwave.schemas.composition import (
     create_chord_event_id,
     create_lyric_line_id,
 )
-from abachiwave.schemas.song_specs import SongSpecData, StructureSection
+from abachiwave.schemas.song_specs import (
+    SongSpecData,
+    StructureSection,
+    canonical_section_slug,
+)
 from abachiwave.schemas.structure import (
     StructureAssetImpact,
     StructureChangeRead,
@@ -404,18 +408,27 @@ async def _apply_structure_change(
     return created
 
 
+def _find_source[S](existing: dict[str, S], target: StructureSectionInput) -> S | None:
+    key = canonical_section_slug(target.source_section_id or target.section_id)
+    source = existing.get(key)
+    if source is None and key.startswith("section-") and key.removeprefix("section-").isdigit():
+        # Chinese-only labels: generation falls back to "section" while
+        # build_structure_sections numbers them "section-N".
+        source = existing.get("section")
+    return source
+
+
 def _remap_lyrics(
     version: LyricsVersion,
     sections: list[StructureSectionInput],
 ) -> list[LyricSection]:
     existing = {
-        section.section_id: section
+        canonical_section_slug(section.section_id): section
         for section in (LyricSection.model_validate(item) for item in version.sections)
     }
     remapped: list[LyricSection] = []
     for target in sections:
-        source_id = target.source_section_id or target.section_id
-        source = existing.get(source_id)
+        source = _find_source(existing, target)
         if source is None:
             text = f"Draft pending for {target.label}."
             lines = [
@@ -454,13 +467,12 @@ def _remap_chords(
     sections: list[StructureSectionInput],
 ) -> list[ChordSection]:
     existing = {
-        section.section_id: section
+        canonical_section_slug(section.section_id): section
         for section in (ChordSection.model_validate(item) for item in version.sections)
     }
     remapped: list[ChordSection] = []
     for target in sections:
-        source_id = target.source_section_id or target.section_id
-        source = existing.get(source_id)
+        source = _find_source(existing, target)
         if source is None:
             remapped.append(
                 ChordSection(
@@ -509,24 +521,33 @@ def _remap_arrangement(
     sections: list[StructureSectionInput],
 ) -> list[ArrangementSection]:
     existing = {
-        section.section_id: section
+        canonical_section_slug(section.section_id): section
         for section in (ArrangementSection.model_validate(item) for item in version.sections)
     }
-    return [
-        ArrangementSection(
-            section_id=target.section_id,
-            label=target.label,
-            instruments=(existing[source_id].instruments if source_id in existing else ["TBD"]),
-            energy_level=existing[source_id].energy_level if source_id in existing else 5,
-            production_notes=(
-                existing[source_id].production_notes
-                if source_id in existing
-                else f"Production notes pending for {target.label}."
-            ),
+    remapped: list[ArrangementSection] = []
+    for target in sections:
+        source = _find_source(existing, target)
+        if source is None:
+            remapped.append(
+                ArrangementSection(
+                    section_id=target.section_id,
+                    label=target.label,
+                    instruments=["TBD"],
+                    energy_level=5,
+                    production_notes=f"Production notes pending for {target.label}.",
+                )
+            )
+            continue
+        remapped.append(
+            ArrangementSection(
+                section_id=target.section_id,
+                label=target.label,
+                instruments=source.instruments,
+                energy_level=source.energy_level,
+                production_notes=source.production_notes,
+            )
         )
-        for target in sections
-        for source_id in [target.source_section_id or target.section_id]
-    ]
+    return remapped
 
 
 def _validate_section_sources(
