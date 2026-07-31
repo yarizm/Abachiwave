@@ -17,6 +17,35 @@ from abachiwave.main import create_app
 
 
 @pytest.mark.asyncio
+async def test_cors_exposes_error_headers() -> None:
+    """Browser clients read the error contract from response headers; CORS
+    must expose them or headerCode/headerHint are null cross-origin."""
+    app = create_app()
+
+    @app.get("/_test/hint-error")
+    async def hint_error() -> None:
+        raise ProblemError(
+            status_code=409,
+            error_code=ErrorCode.PREREQUISITES_MISSING,
+            detail={"message": "missing"},
+            hint=ErrorHint.CHECK_PREREQUISITES,
+        )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/_test/hint-error", headers={"Origin": "http://localhost:3000"}
+        )
+
+    assert response.status_code == 409
+    exposed = {
+        item.strip()
+        for item in response.headers.get("access-control-expose-headers", "").split(",")
+    }
+    assert {"X-Error-Code", "X-Error-Hint", "X-Request-ID"}.issubset(exposed)
+
+
+@pytest.mark.asyncio
 async def test_problem_error_string_detail_keeps_body_adds_header() -> None:
     app = create_app()
 

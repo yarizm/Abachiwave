@@ -124,6 +124,7 @@ def create_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", settings.request_id_header],
+        expose_headers=[_ERROR_CODE_HEADER, _ERROR_HINT_HEADER, settings.request_id_header],
     )
     app.include_router(api_router)
     return app
