@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useWorkspaceData } from "./hooks/use-workspace-data";
 import { usePendingActions } from "./hooks/use-pending-actions";
 import { useToast } from "@/components/toast-provider";
+import { hotkeySubmitAllowed } from "@/lib/form-submit";
 import { useHotkey } from "@/lib/use-hotkey";
 
 import {
@@ -314,7 +315,7 @@ export default function ProjectWorkspaceClient() {
   useHotkey({ key: "Enter", mod: true }, () => {
     const active = document.activeElement as HTMLElement | null;
     const form = active?.closest("form") as HTMLFormElement | null;
-    if (form && !form.dataset.hotkeySubmitDisabled) {
+    if (form && hotkeySubmitAllowed(form)) {
       form.requestSubmit();
     }
   });
@@ -323,7 +324,7 @@ export default function ProjectWorkspaceClient() {
   useHotkey({ key: "s", mod: true }, () => {
     const active = document.activeElement as HTMLElement | null;
     const form = active?.closest("form") as HTMLFormElement | null;
-    if (form && !form.dataset.hotkeySubmitDisabled) {
+    if (form && hotkeySubmitAllowed(form)) {
       form.requestSubmit();
     }
   });
@@ -539,6 +540,9 @@ export default function ProjectWorkspaceClient() {
   async function handleStructureChange(
     payload: StructureChangeRequest,
   ): Promise<StructureChange> {
+    if (pendingActions.isPending("structure")) {
+      throw new Error("Structure change already in progress");
+    }
     pendingActions.begin("structure");
     setError(null);
     setErrorHint(null);
@@ -596,6 +600,9 @@ export default function ProjectWorkspaceClient() {
     sections: LyricSection[],
     hookCandidates: HookCandidate[],
   ) {
+    if (pendingActions.isPending("lyrics")) {
+      return;
+    }
     if (!activeLyrics) {
       return;
     }
@@ -689,6 +696,9 @@ export default function ProjectWorkspaceClient() {
   }
 
   async function handleChordsSave(sections: ChordSection[]) {
+    if (pendingActions.isPending("chords")) {
+      return;
+    }
     if (!activeChords) {
       return;
     }
