@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   formatLocalizedError,
+  formatLocalizedHint,
+  hintActionMessage,
   isLocale,
   translate,
   translateText,
@@ -41,4 +43,20 @@ test("Chinese API errors use a localized fallback and retain diagnostics", () =>
     formatLocalizedError("en", error, "Failed to load workspace"),
     "Internal English detail",
   );
+});
+
+test("error hints localize to the action button label", () => {
+  assert.equal(hintActionMessage("check_prerequisites", "zh-CN"), "先生成缺失的资产");
+  assert.equal(hintActionMessage("check_prerequisites", "en"), "Generate missing assets first");
+  assert.equal(hintActionMessage("retry", "zh-CN"), "重试");
+  assert.equal(hintActionMessage("approve_song_spec", "zh-CN"), "去确认 SongSpec");
+  assert.equal(hintActionMessage(null, "en"), null);
+  assert.equal(hintActionMessage("unknown_hint", "zh-CN"), "unknown_hint");
+});
+
+test("formatLocalizedHint reads the hint off error objects only", () => {
+  assert.equal(formatLocalizedHint("zh-CN", { hint: "retry" }), "重试");
+  assert.equal(formatLocalizedHint("en", { hint: "check_chord_symbol" }), "Check chord symbol or timing");
+  assert.equal(formatLocalizedHint("zh-CN", { status: 500 }), null);
+  assert.equal(formatLocalizedHint("zh-CN", new Error("x")), null);
 });

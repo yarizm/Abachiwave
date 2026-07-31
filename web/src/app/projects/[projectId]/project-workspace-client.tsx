@@ -178,20 +178,11 @@ const apiBaseUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 export default function ProjectWorkspaceClient() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
-  const { errorMessage, locale, t, text } = useLocale();
+  const { errorHint: localizedHint, errorMessage, locale, t, text } = useLocale();
   const { showToast } = useToast();
   function handleApiError(e: unknown, fallback: string) {
-    let hint: string | null = null;
-    if (
-      typeof e === "object" &&
-      e !== null &&
-      "hint" in e &&
-      typeof (e as { hint: unknown }).hint === "string"
-    ) {
-      hint = (e as { hint: string }).hint;
-    }
     setError(errorMessage(e, fallback as never));
-    setErrorHint(hint);
+    setErrorHint(localizedHint(e));
   }
   const {
     project,
