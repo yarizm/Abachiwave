@@ -303,12 +303,25 @@ async def mark_text_evaluation_failed(
         return await _fail_evaluation(session, run, error_code, error_message)
 
 
+def evaluation_run_lock_statement(run_id: UUID) -> Select[tuple[EvaluationRun]]:
+    """Row lock for the human_scores read-modify-write; concurrent submissions
+    must serialize on PostgreSQL or the second commit overwrites the first."""
+    return (
+        select(EvaluationRun)
+        .where(EvaluationRun.id == str(run_id))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 async def add_evaluation_human_scores(
     session: AsyncSession,
     evaluation_run_id: UUID,
     payload: EvaluationHumanScoreCreate,
 ) -> HumanScoreResult:
-    run = await session.get(EvaluationRun, str(evaluation_run_id))
+    run = (
+        await session.execute(evaluation_run_lock_statement(evaluation_run_id))
+    ).scalar_one_or_none()
     if run is None:
         return HumanScoreResult(None, not_found="EvaluationRun not found")
     if run.status != EvaluationRunStatus.succeeded:

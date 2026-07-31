@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -9,7 +9,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.evaluations.samples import load_sample_set, sample_set_summary
-from abachiwave.services.evaluations import execute_text_evaluation
+from abachiwave.services.evaluations import (
+    evaluation_run_lock_statement,
+    execute_text_evaluation,
+)
 from abachiwave.services.task_queue import get_text_evaluation_task_queue
 from abachiwave.services.text_provider import (
     TextGenerationRequest,
@@ -210,3 +213,54 @@ async def test_evaluation_rejects_unknown_inputs_and_early_scoring(
         },
     )
     assert early_score.status_code == 409
+
+
+def test_evaluation_run_lock_uses_postgresql_for_update() -> None:
+    statement = evaluation_run_lock_statement(uuid4())
+
+    assert "FOR UPDATE" in str(statement)
+
+
+@pytest.mark.asyncio
+async def test_serial_human_score_submissions_accumulate(
+    evaluation_client: tuple[AsyncClient, FakeEvaluationQueue],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Regression guard: the read-modify-write on the human_scores JSON column
+    must keep accumulating submissions after the locking refactor."""
+    client, _queue = evaluation_client
+    created = await client.post(
+        "/api/v1/evaluations",
+        json={"workflow": "song_spec", "sample_set": "creative-briefs-v1"},
+    )
+    assert created.status_code == 202
+    run_id = UUID(created.json()["id"])
+
+    completed = await execute_text_evaluation(run_id, session_factory=session_factory)
+    assert completed is not None
+    assert completed.status == "succeeded"
+
+    fetched = await client.get(f"/api/v1/evaluations/{run_id}")
+    first_pair = fetched.json()["metrics"]["blind_pairs"][0]
+    rating = {
+        "sample_id": first_pair["sample_id"],
+        "output_a_theme_consistency": 5,
+        "output_a_editability": 4,
+        "output_b_theme_consistency": 2,
+        "output_b_editability": 3,
+        "preferred_output": "A",
+    }
+    for alias in ("reviewer-one", "reviewer-two"):
+        scored = await client.post(
+            f"/api/v1/evaluations/{run_id}/human-scores",
+            json={"evaluator_alias": alias, "ratings": [rating], "notes": "double"},
+        )
+        assert scored.status_code == 201
+
+    fetched_after = await client.get(f"/api/v1/evaluations/{run_id}")
+    submissions = fetched_after.json()["human_scores"]["submissions"]
+    assert len(submissions) == 2
+    assert {item["evaluator_alias"] for item in submissions} == {
+        "reviewer-one",
+        "reviewer-two",
+    }
