@@ -17,6 +17,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useLyricsDraft } from "@/app/projects/[projectId]/hooks/use-lyrics-draft";
 import { useLocale } from "@/i18n/locale-provider";
+import { EmptyStateAction } from "@/components/workspace/empty-state-action";
 import type {
   HookCandidate,
   LyricSection,
@@ -675,8 +676,17 @@ export function LyricsWorkspace({
             </button>
           </div>
         </form>
+      ) : canGenerate ? (
+        <EmptyStateAction
+          icon={Sparkles}
+          message={t("Generate a lyrics draft from your approved SongSpec.")}
+        />
       ) : (
-        <p className="empty">{t("Approve a SongSpec, then generate a lyrics draft.")}</p>
+        <EmptyStateAction
+          actionLabel={t("Go to SongSpec")}
+          anchor="song-spec-panel"
+          message={t("Generate lyrics after approving a SongSpec")}
+        />
       )}
     </section>
   );

@@ -107,6 +107,7 @@ import {
   versionDiffEndpoint,
   versionRestoreEndpoint,
 } from "@/lib/composition";
+import { deriveCreationStage } from "@/lib/creation-stage";
 import {
   Project,
   normalizeApiBaseUrl,
@@ -159,6 +160,13 @@ const CandidateWorkspace = dynamic(
   () =>
     import("@/components/workspace/candidate-workspace").then(
       (module) => module.CandidateWorkspace,
+    ),
+  { loading: workspaceLoading },
+);
+const CreationChainProgress = dynamic(
+  () =>
+    import("@/components/workspace/creation-chain-progress").then(
+      (module) => module.CreationChainProgress,
     ),
   { loading: workspaceLoading },
 );
@@ -275,6 +283,31 @@ export default function ProjectWorkspaceClient() {
   const canExportProject = canCreateExport(assetTree);
   const hasActiveDemoRun = demoRuns.some(isRunActive);
   const canGenerateDemoVersion = canGenerateDemo(assetTree) && !hasActiveDemoRun;
+  const creationStage = useMemo(
+    () =>
+      deriveCreationStage({
+        latestIntake,
+        versions: sortedVersions,
+        lyricsVersions: sortedLyrics,
+        chordVersions: sortedChords,
+        midiAssets: sortedMidiAssets,
+        arrangementVersions: sortedArrangements,
+        assetTree,
+        demoVersions: sortedDemos,
+        exportBundles: sortedExports,
+      }),
+    [
+      latestIntake,
+      sortedVersions,
+      sortedLyrics,
+      sortedChords,
+      sortedMidiAssets,
+      sortedArrangements,
+      assetTree,
+      sortedDemos,
+      sortedExports,
+    ],
+  );
   const commentTargets = useMemo(
     () =>
       buildCommentTargets({
@@ -1251,6 +1284,9 @@ export default function ProjectWorkspaceClient() {
         review={projectReview}
       />
 
+      {!isLoading ? <CreationChainProgress stage={creationStage} /> : null}
+
+      <div id="song-spec-panel" className="workspace-anchor" tabIndex={-1}>
       <SongSpecWorkspace
         activeVersion={activeVersion}
         answers={answers}
@@ -1267,6 +1303,7 @@ export default function ProjectWorkspaceClient() {
         onSongSpecSubmit={handleSongSpecSubmit}
         state={state}
       />
+      </div>
 
       <StructureWorkspace
         isSaving={pendingActions.isPending("structure")}
@@ -1288,7 +1325,7 @@ export default function ProjectWorkspaceClient() {
         runs={textRuns}
       />
 
-      <div className="asset-grid">
+      <div id="composition-panel" className="asset-grid workspace-anchor" tabIndex={-1}>
         <AudioWorkspace
           approvedSongSpecId={approvedVersion?.id ?? null}
           file={audioUploadFile}
@@ -1331,7 +1368,7 @@ export default function ProjectWorkspaceClient() {
         />
       </div>
 
-      <div className="delivery-grid">
+      <div id="delivery-panel" className="delivery-grid workspace-anchor" tabIndex={-1}>
         <DeliveryWorkspace
           activeArrangement={activeArrangement}
           arrangementPlan={arrangementDraft}
@@ -1345,6 +1382,7 @@ export default function ProjectWorkspaceClient() {
           onCreateExport={handleCreateExport}
           onGenerateArrangement={handleGenerateArrangement}
         />
+        <div id="demo-panel" className="workspace-anchor" tabIndex={-1}>
         <DemoWorkspace
           assetTree={assetTree}
           canGenerate={canGenerateDemoVersion}
@@ -1356,6 +1394,7 @@ export default function ProjectWorkspaceClient() {
           projectId={projectId}
           runs={demoRuns}
         />
+        </div>
       </div>
 
       <RevisionWorkspace

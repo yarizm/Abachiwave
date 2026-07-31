@@ -281,6 +281,122 @@ textarea {
   min-height: 240px;
 }
 
+.workspace-anchor {
+  scroll-margin-top: 80px;
+  outline: none;
+}
+
+.creation-chain {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  padding: var(--space-6);
+}
+
+.creation-chain-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.creation-chain-step {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 120px;
+}
+
+.creation-chain-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-5);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.creation-chain-marker:disabled {
+  cursor: not-allowed;
+}
+
+.creation-chain-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-circle);
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.creation-chain-label {
+  white-space: nowrap;
+}
+
+.creation-chain-connector {
+  flex: 1;
+  min-width: var(--space-6);
+  height: 2px;
+  margin: 0 var(--space-3);
+  background: var(--border);
+}
+
+/* 步骤状态 */
+.creation-chain-step.is-done .creation-chain-index {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.creation-chain-step.is-done .creation-chain-marker {
+  color: var(--foreground);
+}
+
+.creation-chain-step.is-done .creation-chain-connector {
+  background: var(--accent);
+}
+
+.creation-chain-step.is-active .creation-chain-index {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.creation-chain-step.is-active .creation-chain-marker {
+  color: var(--foreground);
+}
+
+.creation-chain-step.is-active .creation-chain-marker:not(:disabled):hover {
+  background: var(--surface-overlay);
+}
+
+.creation-chain-step.is-blocked .creation-chain-marker,
+.creation-chain-step.is-todo .creation-chain-marker {
+  opacity: 0.55;
+}
+
+@media (max-width: 780px) {
+  .creation-chain-step {
+    flex: 1 1 100%;
+  }
+
+  .creation-chain-connector {
+    display: none;
+  }
+}
+
 .workspace-header {
   display: flex;
   align-items: flex-start;
@@ -1858,6 +1974,24 @@ textarea {
   padding: 24px 0 8px;
   color: var(--muted);
   text-align: center;
+}
+
+.empty-state-action {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6) 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-state-action > svg {
+  color: var(--accent);
+}
+
+.empty-state-action .empty {
+  margin: 0;
+  max-width: 46ch;
 }
 
 .compact-empty-state p {

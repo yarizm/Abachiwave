@@ -4,6 +4,7 @@ import { Download, FilePlus2, Save } from "lucide-react";
 import { FormEvent } from "react";
 
 import { DownloadButton } from "@/components/workspace/download-button";
+import { EmptyStateAction } from "@/components/workspace/empty-state-action";
 import { formatBytes, formatPrerequisite } from "@/components/workspace/workspace-format";
 import { useLocale } from "@/i18n/locale-provider";
 import {
@@ -213,10 +214,17 @@ function ArrangementPanel({
             {t("Save arrangement version")}
           </button>
         </form>
+      ) : canGenerate ? (
+        <EmptyStateAction
+          icon={FilePlus2}
+          message={t("Generate an arrangement from your composition")}
+        />
       ) : (
-        <p className="empty">
-          {t("Complete SongSpec, lyrics, chords, and MIDI before generating an arrangement.")}
-        </p>
+        <EmptyStateAction
+          actionLabel={t("Go to composition")}
+          anchor="composition-panel"
+          message={t("Complete composition before arrangement")}
+        />
       )}
     </section>
   );
