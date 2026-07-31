@@ -4,8 +4,14 @@ import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { ToastProvider } from "@/components/toast-provider";
 import { LocaleProvider } from "@/i18n/locale-provider";
-import { ThemeProvider, resolveInitialTheme } from "@/i18n/theme-provider";
-import { DEFAULT_LOCALE, LOCALE_COOKIE, THEME_COOKIE, isLocale } from "@/i18n/translations";
+import { ThemeProvider } from "@/i18n/theme-provider";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  THEME_COOKIE,
+  isLocale,
+  resolveInitialTheme,
+} from "@/i18n/translations";
 import "./globals.css";
 
 export const metadata: Metadata = {

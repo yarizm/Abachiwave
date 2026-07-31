@@ -616,6 +616,11 @@ export function isTheme(value: string | undefined): value is Theme {
   return value === "light" || value === "dark";
 }
 
+/** Resolve the initial theme from a cookie value, falling back to the default. */
+export function resolveInitialTheme(cookieValue: string | undefined): Theme {
+  return isTheme(cookieValue) ? cookieValue : DEFAULT_THEME;
+}
+
 export function translate(
   locale: Locale,
   key: TranslationKey,

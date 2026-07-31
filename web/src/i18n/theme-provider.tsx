@@ -2,7 +2,7 @@
 
 import { createContext, ReactNode, startTransition, useContext, useMemo, useState } from "react";
 
-import { DEFAULT_THEME, THEME_COOKIE, Theme, isTheme } from "@/i18n/translations";
+import { THEME_COOKIE, Theme } from "@/i18n/translations";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -45,9 +45,4 @@ export function useTheme(): ThemeContextValue {
     throw new Error("useTheme must be used within ThemeProvider");
   }
   return context;
-}
-
-/** Resolve the initial theme from a cookie value, falling back to the default. */
-export function resolveInitialTheme(cookieValue: string | undefined): Theme {
-  return isTheme(cookieValue) ? cookieValue : DEFAULT_THEME;
 }

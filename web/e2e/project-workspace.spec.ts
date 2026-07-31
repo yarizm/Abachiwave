@@ -119,7 +119,8 @@ test.describe("project workspace", () => {
 
     await page.getByRole("textbox", { name: "Song idea" }).fill(completeIdea);
     await page.getByRole("button", { name: "Save intake" }).click();
-    await expect(page.getByText("Idea intake request failed with 503", { exact: false })).toBeVisible();
+    // Phase-1 error UX surfaces the API detail string instead of a bare status code.
+    await expect(page.getByText("Temporary intake outage", { exact: false })).toBeVisible();
 
     await runApiAction(
       page,
