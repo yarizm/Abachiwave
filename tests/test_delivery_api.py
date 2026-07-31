@@ -132,6 +132,58 @@ async def test_arrangement_requires_complete_asset_chain(
 
 
 @pytest.mark.asyncio
+async def test_reapproving_song_spec_rebinds_asset_chain(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+) -> None:
+    """Editing and re-approving a SongSpec creates a new spec id; the existing
+    asset chain must be rebound to it (metadata-only) so arrangement and
+    export keep working instead of returning 409 prerequisites_missing."""
+    client, _storage = client_with_storage
+    project_id, song_spec, _lyrics, _chords, _midi_assets = await _create_full_asset_chain(
+        client
+    )
+    arrangement_response = await client.post(
+        f"/api/v1/projects/{project_id}/arrangement/generate",
+        json={"song_spec_id": song_spec["id"]},
+    )
+    assert arrangement_response.status_code == 201
+    old_spec_id = song_spec["id"]
+
+    edit_response = await client.patch(
+        f"/api/v1/projects/{project_id}/song-specs/{old_spec_id}",
+        json={"tempo_bpm": 140},
+    )
+    assert edit_response.status_code == 200
+    new_spec_id = edit_response.json()["id"]
+
+    approve_response = await client.post(
+        f"/api/v1/projects/{project_id}/song-specs/{new_spec_id}/approve",
+    )
+    assert approve_response.status_code == 200
+
+    lyrics_after = (await client.get(f"/api/v1/projects/{project_id}/lyrics")).json()
+    assert lyrics_after[0]["song_spec_id"] == new_spec_id
+    chords_after = (await client.get(f"/api/v1/projects/{project_id}/chords")).json()
+    assert chords_after[0]["song_spec_id"] == new_spec_id
+    midi_after = (await client.get(f"/api/v1/projects/{project_id}/midi-assets")).json()
+    assert {asset["song_spec_id"] for asset in midi_after} == {new_spec_id}
+    arrangements_after = (
+        await client.get(f"/api/v1/projects/{project_id}/arrangements")
+    ).json()
+    assert arrangements_after[0]["song_spec_id"] == new_spec_id
+
+    export_response = await client.post(
+        f"/api/v1/projects/{project_id}/exports",
+        json={},
+    )
+    assert export_response.status_code == 201
+
+    specs = (await client.get(f"/api/v1/projects/{project_id}/song-specs")).json()
+    old_spec = next(item for item in specs if item["id"] == old_spec_id)
+    assert old_spec["status"] == "superseded"
+
+
+@pytest.mark.asyncio
 async def test_arrangement_asset_tree_and_export_zip(
     client_with_storage: tuple[AsyncClient, MemoryStorage],
     session_factory: async_sessionmaker[AsyncSession],

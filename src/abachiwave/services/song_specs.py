@@ -6,6 +6,13 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from abachiwave.agents.song_spec import build_clarification_questions, build_song_spec_from_input
+from abachiwave.models.composition import (
+    ArrangementPlanVersion,
+    ChordProgressionVersion,
+    LyricsVersion,
+    MidiAssetVersion,
+)
+from abachiwave.models.demo import AudioDemoVersion
 from abachiwave.models.project import Project
 from abachiwave.models.song_spec import (
     IdeaIntake,
@@ -210,6 +217,40 @@ async def edit_song_spec_version(
     )
 
 
+REBIND_ASSET_MODELS = (
+    LyricsVersion,
+    ChordProgressionVersion,
+    MidiAssetVersion,
+    ArrangementPlanVersion,
+    AudioDemoVersion,
+)
+
+
+async def rebind_asset_chain_to_song_spec(
+    session: AsyncSession,
+    project_id: UUID,
+    old_spec_id: UUID,
+    new_spec_id: UUID,
+) -> None:
+    """Point every asset row built from old_spec_id at new_spec_id.
+
+    Metadata-only rebind: no rows are copied, versioned, or rewritten, so the
+    immutable-version constraint is untouched. Runs inside the caller's
+    transaction (approve_song_spec_version).
+    """
+    if old_spec_id == new_spec_id:
+        return
+    for model in REBIND_ASSET_MODELS:
+        await session.execute(
+            update(model)
+            .where(
+                model.project_id == str(project_id),
+                model.song_spec_id == str(old_spec_id),
+            )
+            .values(song_spec_id=str(new_spec_id))
+        )
+
+
 async def approve_song_spec_version(
     session: AsyncSession,
     project_id: UUID,
@@ -223,6 +264,15 @@ async def approve_song_spec_version(
     if missing:
         return song_spec, missing
 
+    previous_approved = (
+        await session.execute(
+            select(SongSpecVersion).where(
+                SongSpecVersion.project_id == str(project_id),
+                SongSpecVersion.status == SongSpecStatus.approved,
+                SongSpecVersion.id != str(song_spec_id),
+            )
+        )
+    ).scalar_one_or_none()
     await session.execute(
         update(SongSpecVersion)
         .where(
@@ -234,6 +284,13 @@ async def approve_song_spec_version(
     )
     song_spec.status = SongSpecStatus.approved
     song_spec.approved_at = datetime.now(UTC)
+    if previous_approved is not None:
+        await rebind_asset_chain_to_song_spec(
+            session,
+            project_id,
+            UUID(previous_approved.id),
+            UUID(song_spec.id),
+        )
     add_project_event(
         session,
         project_id=project_id,
