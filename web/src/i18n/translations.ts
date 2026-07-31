@@ -1,9 +1,12 @@
 export const LOCALE_COOKIE = "abachiwave_locale";
+export const THEME_COOKIE = "abachiwave_theme";
 
 export type Locale = "en" | "zh-CN";
+export type Theme = "light" | "dark";
 export type TranslationParams = Record<string, number | string>;
 
 export const DEFAULT_LOCALE: Locale = "en";
+export const DEFAULT_THEME: Theme = "light";
 
 export const zhCN = {
   "Music creation workspace": "音乐创作工作台",
@@ -13,6 +16,10 @@ export const zhCN = {
   Language: "语言",
   English: "英文",
   Chinese: "中文",
+  "Color theme": "主题",
+  Light: "浅色",
+  Dark: "深色",
+  "Toggle theme": "切换主题",
   "Local development login": "本地开发登录",
   "Authentication is intentionally a placeholder in Milestone 0. Use the local projects workspace to verify the API, database, and frontend integration.":
     "Milestone 0 暂时使用登录占位页。请进入本地项目工作台，验证 API、数据库和前端集成。",
@@ -553,6 +560,10 @@ export type TranslationKey = keyof typeof zhCN;
 
 export function isLocale(value: string | undefined): value is Locale {
   return value === "en" || value === "zh-CN";
+}
+
+export function isTheme(value: string | undefined): value is Theme {
+  return value === "light" || value === "dark";
 }
 
 export function translate(
