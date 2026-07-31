@@ -29,6 +29,7 @@ from abachiwave.schemas.composition import (
 )
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.chord_theory import (
+    ChordTheoryError,
     normalize_chord_sections,
     transpose_chord_sections,
 )
@@ -63,11 +64,18 @@ def lyrics_version_to_read(version: LyricsVersion) -> LyricsVersionRead:
 
 
 def chord_progression_to_read(version: ChordProgressionVersion) -> ChordProgressionVersionRead:
-    sections = normalize_chord_sections(
-        [ChordSection.model_validate(section) for section in version.sections],
-        key_name=version.key,
-        time_signature=version.time_signature,
-    )
+    validated = [ChordSection.model_validate(section) for section in version.sections]
+    try:
+        sections = normalize_chord_sections(
+            validated,
+            key_name=version.key,
+            time_signature=version.time_signature,
+        )
+    except ChordTheoryError:
+        # Legacy rows (pre-migration 202607140003) may hold unanalyzable symbols
+        # or non-numeric time signatures. Serve the raw progression so the
+        # workspace stays open and the row stays editable/deletable.
+        sections = validated
     return ChordProgressionVersionRead(
         id=UUID(version.id),
         project_id=UUID(version.project_id),

@@ -1,13 +1,15 @@
 from collections.abc import AsyncIterator
 from io import BytesIO
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from mido import MidiFile
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from abachiwave.models.composition import ChordProgressionVersion
 from abachiwave.services import composition as composition_service
 from abachiwave.services.storage import get_object_storage
 
@@ -88,6 +90,62 @@ async def test_unapproved_song_spec_cannot_generate_lyrics(
     assert response.status_code == 409
     assert response.headers["X-Error-Code"] == "song_spec_not_approved"
     assert response.headers["X-Error-Hint"] == "approve_song_spec"
+
+
+@pytest.mark.asyncio
+async def test_legacy_chord_version_with_invalid_symbol_is_served_not_500(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Rows written before chord normalization (migration 202607140003) may hold
+    symbols music21 cannot parse; the list endpoint must serve them unnormalized
+    instead of failing the whole workspace with a 500."""
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+
+    async with session_factory() as session:
+        session.add(
+            ChordProgressionVersion(
+                id=str(uuid4()),
+                project_id=project_id,
+                song_spec_id=str(song_spec["id"]),
+                version_number=1,
+                key="E major",
+                tempo_bpm=128,
+                time_signature="4/4",
+                sections=[
+                    {
+                        "section_id": "verse",
+                        "label": "Verse",
+                        "bars": 4,
+                        "measures": [
+                            {
+                                "measure_number": measure_number,
+                                "events": [
+                                    {
+                                        "event_id": f"legacy-event-{measure_number}",
+                                        "measure": measure_number,
+                                        "beat": 1,
+                                        "duration_beats": 4,
+                                        "symbol": "H#7",
+                                        "inversion": None,
+                                    }
+                                ],
+                            }
+                            for measure_number in range(1, 5)
+                        ],
+                    }
+                ],
+            )
+        )
+        await session.commit()
+
+    response = await client.get(f"/api/v1/projects/{project_id}/chords")
+
+    assert response.status_code == 200
+    sections = response.json()[0]["sections"]
+    assert sections[0]["section_id"] == "verse"
+    assert sections[0]["measures"][0]["events"][0]["symbol"] == "H#7"
 
 
 @pytest.mark.asyncio
