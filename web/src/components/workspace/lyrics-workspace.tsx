@@ -42,6 +42,7 @@ import {
 type LyricsWorkspaceProps = {
   activeLyrics: LyricsVersion | null;
   canGenerate: boolean;
+  disabledReason?: string | null;
   isGenerating: boolean;
   isRewriting: boolean;
   isSaving: boolean;
@@ -67,6 +68,7 @@ const rewriteActions: LyricsRewriteAction[] = [
 export function LyricsWorkspace({
   activeLyrics,
   canGenerate,
+  disabledReason,
   isGenerating,
   isRewriting,
   isSaving,
@@ -251,8 +253,10 @@ export function LyricsWorkspace({
           </button>
           <button
             className="button secondary"
+            data-guarded={!canGenerate || undefined}
             disabled={!canGenerate || isGenerating || isSaving}
             onClick={onGenerate}
+            title={!canGenerate ? (disabledReason ?? undefined) : undefined}
             type="button"
           >
             <FilePlus2 aria-hidden="true" size={17} />

@@ -727,6 +727,30 @@ export function canCancelRun(run: GenerationRun): boolean {
   return run.status === "queued" || run.status === "running";
 }
 
+/**
+ * A short, present-tense label describing a run's lifecycle phase, suitable for
+ * surfacing next to a pulse indicator so users can tell a long task is still
+ * progressing rather than stuck. Returns null for terminal states (no pulse).
+ * The literal values double as translation keys in i18n.
+ */
+export function runProgressHint(
+  status: GenerationRunStatus,
+): "Task is queued, will start shortly" | "Task is running, status refreshes automatically" | null {
+  switch (status) {
+    case "queued":
+      return "Task is queued, will start shortly";
+    case "running":
+      return "Task is running, status refreshes automatically";
+    default:
+      return null;
+  }
+}
+
+/** Whether a run status warrants an animated "in progress" pulse indicator. */
+export function isRunInProgress(run: GenerationRun): boolean {
+  return run.status === "queued" || run.status === "running";
+}
+
 export function validateRevisionFeedback(value: string): string | null {
   if (!value.trim()) {
     return "Revision feedback is required.";

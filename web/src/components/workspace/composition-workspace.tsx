@@ -26,6 +26,7 @@ type CompositionWorkspaceProps = {
   activeChords: ChordProgressionVersion | null;
   activeLyrics: LyricsVersion | null;
   canGenerate: boolean;
+  disabledReason?: string | null;
   isGeneratingChords: boolean;
   isGeneratingLyrics: boolean;
   isPreviewingChords: boolean;
@@ -52,6 +53,7 @@ export function CompositionWorkspace({
   activeChords,
   activeLyrics,
   canGenerate,
+  disabledReason,
   isGeneratingChords,
   isGeneratingLyrics,
   isPreviewingChords,
@@ -76,6 +78,7 @@ export function CompositionWorkspace({
       <LyricsWorkspace
         activeLyrics={activeLyrics}
         canGenerate={canGenerate}
+        disabledReason={disabledReason}
         isGenerating={isGeneratingLyrics}
         isRewriting={isRewritingLyrics}
         isSaving={isSavingLyrics}
@@ -87,6 +90,7 @@ export function CompositionWorkspace({
       <ChordWorkspace
         activeChords={activeChords}
         canGenerate={canGenerate}
+        disabledReason={disabledReason}
         isGenerating={isGeneratingChords}
         isPreviewing={isPreviewingChords}
         isSaving={isSavingChords}
@@ -100,6 +104,7 @@ export function CompositionWorkspace({
       <MidiPanel
         assets={midiAssets}
         canGenerate={canGenerate}
+        disabledReason={disabledReason}
         isSaving={isSavingComposition}
         onGenerate={onGenerateMidi}
         projectId={projectId}
@@ -111,17 +116,20 @@ export function CompositionWorkspace({
 function MidiPanel({
   assets,
   canGenerate,
+  disabledReason,
   isSaving,
   onGenerate,
   projectId,
 }: {
   assets: MidiAssetVersion[];
   canGenerate: boolean;
+  disabledReason?: string | null;
   isSaving: boolean;
   onGenerate: () => void;
   projectId: string;
 }) {
   const { t, text } = useLocale();
+  const midiDisabled = !canGenerate || isSaving;
   return (
     <section className="panel" aria-labelledby="midi-title">
       <div className="section-heading">
@@ -130,8 +138,10 @@ function MidiPanel({
       </div>
       <button
         className="button secondary full-width"
-        disabled={!canGenerate || isSaving}
+        data-guarded={!canGenerate || undefined}
+        disabled={midiDisabled}
         onClick={onGenerate}
+        title={!canGenerate ? (disabledReason ?? undefined) : undefined}
         type="button"
       >
         <Music2 aria-hidden="true" size={18} />

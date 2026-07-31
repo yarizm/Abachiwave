@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 
 import { useWorkspaceData } from "./hooks/use-workspace-data";
 import { usePendingActions } from "./hooks/use-pending-actions";
+import { useToast } from "@/components/toast-provider";
+import { useHotkey } from "@/lib/use-hotkey";
 
 import {
   CollaborationWorkspace,
@@ -177,6 +179,7 @@ export default function ProjectWorkspaceClient() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
   const { errorMessage, locale, t, text } = useLocale();
+  const { showToast } = useToast();
   function handleApiError(e: unknown, fallback: string) {
     let hint: string | null = null;
     if (
@@ -283,6 +286,14 @@ export default function ProjectWorkspaceClient() {
   const canExportProject = canCreateExport(assetTree);
   const hasActiveDemoRun = demoRuns.some(isRunActive);
   const canGenerateDemoVersion = canGenerateDemo(assetTree) && !hasActiveDemoRun;
+  const compositionGuardReason = canGenerateAssets ? null : t("Approve a SongSpec to enable generation");
+  const arrangementGuardReason = canGenerateArrangementPlan ? null : t("Complete lyrics, chords, and MIDI to enable arrangement");
+  const demoGuardReason = !canGenerateDemo(assetTree)
+    ? t("Complete all prerequisites to enable demo")
+    : hasActiveDemoRun
+      ? t("A generation run is already active")
+      : null;
+  const exportGuardReason = canExportProject ? null : t("Complete all prerequisites to enable export");
   const creationStage = useMemo(
     () =>
       deriveCreationStage({
@@ -308,6 +319,23 @@ export default function ProjectWorkspaceClient() {
       sortedExports,
     ],
   );
+  // Cmd/Ctrl+Enter submits the form currently holding focus.
+  useHotkey({ key: "Enter", mod: true }, () => {
+    const active = document.activeElement as HTMLElement | null;
+    const form = active?.closest("form") as HTMLFormElement | null;
+    if (form && !form.dataset.hotkeySubmitDisabled) {
+      form.requestSubmit();
+    }
+  });
+  // Cmd/Ctrl+S saves the editor form currently holding focus (overrides
+  // the browser save dialog only while focused inside a workspace form).
+  useHotkey({ key: "s", mod: true }, () => {
+    const active = document.activeElement as HTMLElement | null;
+    const form = active?.closest("form") as HTMLFormElement | null;
+    if (form && !form.dataset.hotkeySubmitDisabled) {
+      form.requestSubmit();
+    }
+  });
   const commentTargets = useMemo(
     () =>
       buildCommentTargets({
@@ -509,6 +537,7 @@ export default function ProjectWorkspaceClient() {
         { method: "POST" },
       );
       await loadWorkspace();
+      showToast(t("SongSpec approved"));
     } catch (approveError) {
       handleApiError(approveError, "Failed to approve SongSpec");
     } finally {
@@ -564,6 +593,7 @@ export default function ProjectWorkspaceClient() {
       );
       setLyricsVersions((current) => sortLyricsVersions([generated, ...current]));
       await loadWorkspace();
+      showToast(t("Lyrics generation started"));
     } catch (lyricsError) {
       handleApiError(lyricsError, "Failed to generate lyrics");
     } finally {
@@ -601,6 +631,7 @@ export default function ProjectWorkspaceClient() {
       );
       setLyricsVersions((current) => sortLyricsVersions([edited, ...current]));
       await loadWorkspace();
+      showToast(t("Lyrics saved"));
     } catch (lyricsError) {
       handleApiError(lyricsError, "Failed to edit lyrics");
     } finally {
@@ -658,6 +689,7 @@ export default function ProjectWorkspaceClient() {
       );
       setChordVersions((current) => sortChordVersions([generated, ...current]));
       await loadWorkspace();
+      showToast(t("Chords generation started"));
     } catch (chordsError) {
       handleApiError(chordsError, "Failed to generate chords");
     } finally {
@@ -689,6 +721,7 @@ export default function ProjectWorkspaceClient() {
       );
       setChordVersions((current) => sortChordVersions([edited, ...current]));
       await loadWorkspace();
+      showToast(t("Chords saved"));
     } catch (chordsError) {
       handleApiError(chordsError, "Failed to edit chords");
     } finally {
@@ -1231,6 +1264,7 @@ export default function ProjectWorkspaceClient() {
         },
       );
       setProject(updatedProject);
+      showToast(t("Project saved"));
     } catch (updateError) {
       handleApiError(updateError, "Failed to update project");
     } finally {
@@ -1347,6 +1381,7 @@ export default function ProjectWorkspaceClient() {
           activeChords={activeChords}
           activeLyrics={activeLyrics}
           canGenerate={canGenerateAssets}
+          disabledReason={compositionGuardReason}
           isGeneratingChords={pendingActions.isPending("chords")}
           isGeneratingLyrics={pendingActions.isPending("composition")}
           isPreviewingChords={pendingActions.isPending("chordsPreview")}
@@ -1375,6 +1410,8 @@ export default function ProjectWorkspaceClient() {
           assetTree={assetTree}
           canExport={canExportProject}
           canGenerateArrangement={canGenerateArrangementPlan}
+          arrangementDisabledReason={arrangementGuardReason}
+          exportDisabledReason={exportGuardReason}
           exports={sortedExports}
           isSaving={pendingActions.isPending("delivery")}
           onArrangementChange={setArrangementDraft}
@@ -1386,6 +1423,7 @@ export default function ProjectWorkspaceClient() {
         <DemoWorkspace
           assetTree={assetTree}
           canGenerate={canGenerateDemoVersion}
+          disabledReason={demoGuardReason}
           demos={sortedDemos}
           isSaving={pendingActions.isPending("demo", "tasks")}
           onGenerate={handleGenerateDemo}

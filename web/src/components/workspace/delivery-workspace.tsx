@@ -23,6 +23,8 @@ type DeliveryWorkspaceProps = {
   assetTree: AssetTree | null;
   canExport: boolean;
   canGenerateArrangement: boolean;
+  arrangementDisabledReason?: string | null;
+  exportDisabledReason?: string | null;
   exports: ExportBundle[];
   isSaving: boolean;
   onArrangementChange: (next: ArrangementPlan) => void;
@@ -39,6 +41,8 @@ export function DeliveryWorkspace({
   assetTree,
   canExport,
   canGenerateArrangement,
+  arrangementDisabledReason,
+  exportDisabledReason,
   exports,
   isSaving,
   onArrangementChange,
@@ -51,6 +55,7 @@ export function DeliveryWorkspace({
       <ArrangementPanel
         activeArrangement={activeArrangement}
         canGenerate={canGenerateArrangement}
+        disabledReason={arrangementDisabledReason}
         isSaving={isSaving}
         onChange={onArrangementChange}
         onGenerate={onGenerateArrangement}
@@ -60,6 +65,7 @@ export function DeliveryWorkspace({
       <ExportPanel
         assetTree={assetTree}
         canExport={canExport}
+        disabledReason={exportDisabledReason}
         exports={exports}
         isSaving={isSaving}
         onCreateExport={onCreateExport}
@@ -80,6 +86,7 @@ export function emptyArrangementPlan(): ArrangementPlan {
 function ArrangementPanel({
   activeArrangement,
   canGenerate,
+  disabledReason,
   isSaving,
   onChange,
   onGenerate,
@@ -88,6 +95,7 @@ function ArrangementPanel({
 }: {
   activeArrangement: ArrangementPlanVersion | null;
   canGenerate: boolean;
+  disabledReason?: string | null;
   isSaving: boolean;
   onChange: (next: ArrangementPlan) => void;
   onGenerate: () => void;
@@ -105,8 +113,10 @@ function ArrangementPanel({
       </div>
       <button
         className="button secondary full-width"
+        data-guarded={!canGenerate || undefined}
         disabled={!canGenerate || isSaving}
         onClick={onGenerate}
+        title={!canGenerate ? (disabledReason ?? undefined) : undefined}
         type="button"
       >
         <FilePlus2 aria-hidden="true" size={18} />
@@ -233,12 +243,14 @@ function ArrangementPanel({
 function ExportPanel({
   assetTree,
   canExport,
+  disabledReason,
   exports,
   isSaving,
   onCreateExport,
 }: {
   assetTree: AssetTree | null;
   canExport: boolean;
+  disabledReason?: string | null;
   exports: ExportBundle[];
   isSaving: boolean;
   onCreateExport: () => void;
@@ -253,8 +265,10 @@ function ExportPanel({
       </div>
       <button
         className="button secondary full-width"
+        data-guarded={!canExport || undefined}
         disabled={!canExport || isSaving}
         onClick={onCreateExport}
+        title={!canExport ? (disabledReason ?? undefined) : undefined}
         type="button"
       >
         <Download aria-hidden="true" size={18} />

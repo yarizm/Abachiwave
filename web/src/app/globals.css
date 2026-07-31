@@ -1248,6 +1248,92 @@ textarea {
   border: 0;
 }
 
+.run-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: var(--space-3);
+  border-radius: var(--radius-circle);
+  background: var(--accent);
+  animation: run-pulse 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes run-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* disabled-by-guard buttons keep a help cursor to signal an explanatory title */
+.button[data-guarded]:disabled {
+  cursor: help;
+}
+
+.toast-region {
+  position: fixed;
+  right: var(--space-12);
+  bottom: var(--space-12);
+  display: grid;
+  gap: var(--space-5);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 240px;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-6);
+  background: var(--panel);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+  pointer-events: auto;
+}
+
+.toast > svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+}
+
+.toast-dismiss {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toast-dismiss:hover {
+  background: var(--surface-overlay);
+  color: var(--foreground);
+}
+
+@media (max-width: 780px) {
+  .toast-region {
+    right: var(--space-5);
+    left: var(--space-5);
+    bottom: var(--space-5);
+  }
+
+  .toast {
+    max-width: none;
+  }
+}
+
 .structure-heading {
   align-items: center;
 }

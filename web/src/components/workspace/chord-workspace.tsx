@@ -40,6 +40,7 @@ import { validateChordSections } from "@/lib/composition";
 type ChordWorkspaceProps = {
   activeChords: ChordProgressionVersion | null;
   canGenerate: boolean;
+  disabledReason?: string | null;
   isGenerating: boolean;
   isPreviewing: boolean;
   isSaving: boolean;
@@ -57,6 +58,7 @@ const transposeIntervals = [-11, -9, -7, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 7, 9
 export function ChordWorkspace({
   activeChords,
   canGenerate,
+  disabledReason,
   isGenerating,
   isPreviewing,
   isSaving,
@@ -249,8 +251,10 @@ export function ChordWorkspace({
           </button>
           <button
             className="button secondary"
+            data-guarded={!canGenerate || undefined}
             disabled={!canGenerate || isGenerating || isSaving}
             onClick={onGenerate}
+            title={!canGenerate ? (disabledReason ?? undefined) : undefined}
             type="button"
           >
             <FilePlus2 aria-hidden="true" size={17} />

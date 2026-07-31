@@ -38,6 +38,7 @@ import {
   midiAssetDownloadEndpoint,
   midiAssetsEndpoint,
   midiGenerateEndpoint,
+  runProgressHint,
   projectRunsEndpoint,
   projectCommentEndpoint,
   projectCommentsEndpoint,
@@ -687,6 +688,14 @@ test("demo run helpers expose polling and retry states", () => {
     canRetryRun({ ...generationRun("failed", "2026-07-08T00:00:00Z"), run_type: "audio_to_midi" }),
     false,
   );
+});
+
+test("runProgressHint describes active phases and returns null for terminal states", () => {
+  assert.equal(runProgressHint("queued"), "Task is queued, will start shortly");
+  assert.equal(runProgressHint("running"), "Task is running, status refreshes automatically");
+  assert.equal(runProgressHint("succeeded"), null);
+  assert.equal(runProgressHint("failed"), null);
+  assert.equal(runProgressHint("cancelled"), null);
 });
 
 test("audio upload validators require WAV files", () => {

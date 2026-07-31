@@ -14,12 +14,15 @@ import {
   canRetryRun,
   demoDownloadEndpoint,
   isRunActive,
+  isRunInProgress,
+  runProgressHint,
 } from "@/lib/composition";
 import { normalizeApiBaseUrl } from "@/lib/projects";
 
 type DemoWorkspaceProps = {
   assetTree: AssetTree | null;
   canGenerate: boolean;
+  disabledReason?: string | null;
   demos: AudioDemoVersion[];
   isSaving: boolean;
   onCancel: (runId: string) => void;
@@ -34,6 +37,7 @@ const apiBaseUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 export function DemoWorkspace({
   assetTree,
   canGenerate,
+  disabledReason,
   demos,
   isSaving,
   onGenerate,
@@ -53,8 +57,10 @@ export function DemoWorkspace({
       </div>
       <button
         className="button secondary full-width"
+        data-guarded={!canGenerate || undefined}
         disabled={!canGenerate || isSaving}
         onClick={onGenerate}
+        title={!canGenerate ? (disabledReason ?? undefined) : undefined}
         type="button"
       >
         <Music2 aria-hidden="true" size={18} />
@@ -73,10 +79,16 @@ export function DemoWorkspace({
           {runs.slice(0, 5).map((run) => (
             <div className="run-row" key={run.id}>
               <div>
-                <strong>{run.provider_name}</strong>
+                <strong>
+                  {run.provider_name}
+                  {isRunInProgress(run) ? <span className="run-pulse" aria-hidden="true" /> : null}
+                </strong>
                 <p className="meta">
                   {text(run.status)} - {dateTime(run.created_at)}
                 </p>
+                {runProgressHint(run.status) ? (
+                  <p className="meta">{t(runProgressHint(run.status)!)}</p>
+                ) : null}
                 {run.error_message ? (
                   <p className="error">
                     {locale === "zh-CN" && text(run.error_message) === run.error_message
