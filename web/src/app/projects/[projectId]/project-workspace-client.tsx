@@ -169,6 +169,19 @@ export default function ProjectWorkspaceClient() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
   const { errorMessage, locale, t, text } = useLocale();
+  function handleApiError(e: unknown, fallback: string) {
+    let hint: string | null = null;
+    if (
+      typeof e === "object" &&
+      e !== null &&
+      "hint" in e &&
+      typeof (e as { hint: unknown }).hint === "string"
+    ) {
+      hint = (e as { hint: string }).hint;
+    }
+    setError(errorMessage(e, fallback as never));
+    setErrorHint(hint);
+  }
   const {
     project,
     setProject,
@@ -204,6 +217,7 @@ export default function ProjectWorkspaceClient() {
     setError,
     loadWorkspace,
   } = useWorkspaceData(apiBaseUrl, projectId);
+  const [errorHint, setErrorHint] = useState<string | null>(null);
   const [idea, setIdea] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [draftForm, setDraftForm] = useState<SongSpecDraftForm>(() => emptyDraftForm());
@@ -308,6 +322,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("songSpec");
     setError(null);
+    setErrorHint(null);
     try {
       const intake = await fetchJson<IdeaIntake>(intakeEndpoint(apiBaseUrl, projectId), "Idea intake", {
         method: "POST",
@@ -318,7 +333,7 @@ export default function ProjectWorkspaceClient() {
       setAnswers(intake.answers);
       await loadWorkspace();
     } catch (submitError) {
-      setError(errorMessage(submitError, "Failed to save intake"));
+      handleApiError(submitError, "Failed to save intake");
     } finally {
       pendingActions.end("songSpec");
     }
@@ -331,6 +346,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("songSpec");
     setError(null);
+    setErrorHint(null);
     try {
       const generated = await fetchJson<SongSpecVersion>(
         songSpecGenerateEndpoint(apiBaseUrl, projectId),
@@ -344,7 +360,7 @@ export default function ProjectWorkspaceClient() {
       setVersions((current) => sortSongSpecVersions([generated, ...current]));
       await loadWorkspace();
     } catch (generateError) {
-      setError(errorMessage(generateError, "Failed to generate SongSpec"));
+      handleApiError(generateError, "Failed to generate SongSpec");
     } finally {
       pendingActions.end("songSpec");
     }
@@ -376,6 +392,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("ai");
     setError(null);
+    setErrorHint(null);
     try {
       const run = await fetchJson<GenerationRun>(
         candidateGenerateEndpoint(apiBaseUrl, projectId),
@@ -389,7 +406,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (candidateError) {
-      setError(errorMessage(candidateError, "Failed to generate candidates"));
+      handleApiError(candidateError, "Failed to generate candidates");
     } finally {
       pendingActions.end("ai");
     }
@@ -398,6 +415,7 @@ export default function ProjectWorkspaceClient() {
   async function handleSelectCandidate(candidateId: string) {
     pendingActions.begin("ai");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<CandidateSelection>(
         candidateSelectEndpoint(apiBaseUrl, projectId, candidateId),
@@ -406,7 +424,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (candidateError) {
-      setError(errorMessage(candidateError, "Failed to select candidate"));
+      handleApiError(candidateError, "Failed to select candidate");
     } finally {
       pendingActions.end("ai");
     }
@@ -424,6 +442,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("songSpec");
     setError(null);
+    setErrorHint(null);
     try {
       const edited = await fetchJson<SongSpecVersion>(
         songSpecVersionEndpoint(apiBaseUrl, projectId, activeVersion.id),
@@ -437,7 +456,7 @@ export default function ProjectWorkspaceClient() {
       setVersions((current) => sortSongSpecVersions([edited, ...current]));
       await loadWorkspace();
     } catch (editError) {
-      setError(errorMessage(editError, "Failed to edit SongSpec"));
+      handleApiError(editError, "Failed to edit SongSpec");
     } finally {
       pendingActions.end("songSpec");
     }
@@ -449,6 +468,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("songSpec");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<SongSpecVersion>(
         songSpecApproveEndpoint(apiBaseUrl, projectId, activeVersion.id),
@@ -457,7 +477,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (approveError) {
-      setError(errorMessage(approveError, "Failed to approve SongSpec"));
+      handleApiError(approveError, "Failed to approve SongSpec");
     } finally {
       pendingActions.end("songSpec");
     }
@@ -468,6 +488,7 @@ export default function ProjectWorkspaceClient() {
   ): Promise<StructureChange> {
     pendingActions.begin("structure");
     setError(null);
+    setErrorHint(null);
     try {
       const result = await fetchJson<StructureChange>(
         structureEndpoint(apiBaseUrl, projectId),
@@ -483,7 +504,7 @@ export default function ProjectWorkspaceClient() {
       }
       return result;
     } catch (structureError) {
-      setError(errorMessage(structureError, "Failed to update song structure"));
+      handleApiError(structureError, "Failed to update song structure");
       throw structureError;
     } finally {
       pendingActions.end("structure");
@@ -497,6 +518,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("composition");
     setError(null);
+    setErrorHint(null);
     try {
       const generated = await fetchJson<LyricsVersion>(
         lyricsGenerateEndpoint(apiBaseUrl, projectId),
@@ -510,7 +532,7 @@ export default function ProjectWorkspaceClient() {
       setLyricsVersions((current) => sortLyricsVersions([generated, ...current]));
       await loadWorkspace();
     } catch (lyricsError) {
-      setError(errorMessage(lyricsError, "Failed to generate lyrics"));
+      handleApiError(lyricsError, "Failed to generate lyrics");
     } finally {
       pendingActions.end("composition");
     }
@@ -530,6 +552,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("lyrics");
     setError(null);
+    setErrorHint(null);
     try {
       const edited = await fetchJson<LyricsVersion>(
         lyricsVersionEndpoint(apiBaseUrl, projectId, activeLyrics.id),
@@ -546,7 +569,7 @@ export default function ProjectWorkspaceClient() {
       setLyricsVersions((current) => sortLyricsVersions([edited, ...current]));
       await loadWorkspace();
     } catch (lyricsError) {
-      setError(errorMessage(lyricsError, "Failed to edit lyrics"));
+      handleApiError(lyricsError, "Failed to edit lyrics");
     } finally {
       pendingActions.end("lyrics");
     }
@@ -560,6 +583,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("lyricsRewrite");
     setError(null);
+    setErrorHint(null);
     try {
       return await fetchJson<LyricsRewritePreview>(
         lyricsRewriteEndpoint(apiBaseUrl, projectId, activeLyrics.id),
@@ -571,7 +595,7 @@ export default function ProjectWorkspaceClient() {
         },
       );
     } catch (lyricsError) {
-      setError(errorMessage(lyricsError, "Failed to preview lyrics rewrite"));
+      handleApiError(lyricsError, "Failed to preview lyrics rewrite");
       throw lyricsError;
     } finally {
       pendingActions.end("lyricsRewrite");
@@ -585,6 +609,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("chords");
     setError(null);
+    setErrorHint(null);
     try {
       const generated = await fetchJson<ChordProgressionVersion>(
         chordsGenerateEndpoint(apiBaseUrl, projectId),
@@ -601,7 +626,7 @@ export default function ProjectWorkspaceClient() {
       setChordVersions((current) => sortChordVersions([generated, ...current]));
       await loadWorkspace();
     } catch (chordsError) {
-      setError(errorMessage(chordsError, "Failed to generate chords"));
+      handleApiError(chordsError, "Failed to generate chords");
     } finally {
       pendingActions.end("chords");
     }
@@ -618,6 +643,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("chords");
     setError(null);
+    setErrorHint(null);
     try {
       const edited = await fetchJson<ChordProgressionVersion>(
         chordVersionEndpoint(apiBaseUrl, projectId, activeChords.id),
@@ -631,7 +657,7 @@ export default function ProjectWorkspaceClient() {
       setChordVersions((current) => sortChordVersions([edited, ...current]));
       await loadWorkspace();
     } catch (chordsError) {
-      setError(errorMessage(chordsError, "Failed to edit chords"));
+      handleApiError(chordsError, "Failed to edit chords");
     } finally {
       pendingActions.end("chords");
     }
@@ -649,6 +675,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("chordsPreview");
     setError(null);
+    setErrorHint(null);
     try {
       return await fetchJson<ChordPreview>(
         chordPreviewEndpoint(apiBaseUrl, projectId, activeChords.id),
@@ -660,7 +687,7 @@ export default function ProjectWorkspaceClient() {
         },
       );
     } catch (chordsError) {
-      setError(errorMessage(chordsError, "Failed to validate chords"));
+      handleApiError(chordsError, "Failed to validate chords");
       throw chordsError;
     } finally {
       pendingActions.end("chordsPreview");
@@ -673,6 +700,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("chordsTranspose");
     setError(null);
+    setErrorHint(null);
     try {
       const transposed = await fetchJson<ChordProgressionVersion>(
         chordTransposeEndpoint(apiBaseUrl, projectId, activeChords.id),
@@ -689,7 +717,7 @@ export default function ProjectWorkspaceClient() {
       setChordVersions((current) => sortChordVersions([transposed, ...current]));
       await loadWorkspace();
     } catch (chordsError) {
-      setError(errorMessage(chordsError, "Failed to transpose chords"));
+      handleApiError(chordsError, "Failed to transpose chords");
     } finally {
       pendingActions.end("chordsTranspose");
     }
@@ -702,6 +730,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("composition");
     setError(null);
+    setErrorHint(null);
     try {
       const generated = await fetchJson<MidiAssetVersion[]>(
         midiGenerateEndpoint(apiBaseUrl, projectId),
@@ -719,7 +748,7 @@ export default function ProjectWorkspaceClient() {
       setMidiAssets((current) => sortMidiAssets([...generated, ...current]));
       await loadWorkspace();
     } catch (midiError) {
-      setError(errorMessage(midiError, "Failed to generate MIDI"));
+      handleApiError(midiError, "Failed to generate MIDI");
     } finally {
       pendingActions.end("composition");
     }
@@ -737,6 +766,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("audio");
     setError(null);
+    setErrorHint(null);
     try {
       const formData = new FormData();
       formData.append("file", audioUploadFile);
@@ -753,7 +783,7 @@ export default function ProjectWorkspaceClient() {
       setAudioUploadNotes("");
       await loadWorkspace();
     } catch (uploadError) {
-      setError(errorMessage(uploadError, "Failed to upload audio"));
+      handleApiError(uploadError, "Failed to upload audio");
     } finally {
       pendingActions.end("audio");
     }
@@ -773,6 +803,7 @@ export default function ProjectWorkspaceClient() {
 
     pendingActions.begin("audio");
     setError(null);
+    setErrorHint(null);
     try {
       const updatedUpload = await fetchJson<AudioUpload>(
         audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId),
@@ -790,7 +821,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (updateError) {
-      setError(errorMessage(updateError, "Failed to update audio"));
+      handleApiError(updateError, "Failed to update audio");
     } finally {
       pendingActions.end("audio");
     }
@@ -803,6 +834,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("audio");
     setError(null);
+    setErrorHint(null);
     try {
       const run = await fetchJson<GenerationRun>(
         audioExtractMidiEndpoint(apiBaseUrl, projectId, audioUploadId),
@@ -816,7 +848,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (extractError) {
-      setError(errorMessage(extractError, "Failed to extract melody MIDI"));
+      handleApiError(extractError, "Failed to extract melody MIDI");
     } finally {
       pendingActions.end("audio");
     }
@@ -829,6 +861,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("delivery");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<unknown>(
         arrangementGenerateEndpoint(apiBaseUrl, projectId),
@@ -841,7 +874,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (arrangementError) {
-      setError(errorMessage(arrangementError, "Failed to generate arrangement"));
+      handleApiError(arrangementError, "Failed to generate arrangement");
     } finally {
       pendingActions.end("delivery");
     }
@@ -859,6 +892,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("delivery");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<unknown>(
         arrangementVersionEndpoint(apiBaseUrl, projectId, activeArrangement.id),
@@ -871,7 +905,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (arrangementError) {
-      setError(errorMessage(arrangementError, "Failed to edit arrangement"));
+      handleApiError(arrangementError, "Failed to edit arrangement");
     } finally {
       pendingActions.end("delivery");
     }
@@ -880,6 +914,7 @@ export default function ProjectWorkspaceClient() {
   async function handleCreateExport() {
     pendingActions.begin("delivery");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<unknown>(exportsEndpoint(apiBaseUrl, projectId), "Project export", {
         method: "POST",
@@ -888,7 +923,7 @@ export default function ProjectWorkspaceClient() {
       });
       await loadWorkspace();
     } catch (exportError) {
-      setError(errorMessage(exportError, "Failed to export project"));
+      handleApiError(exportError, "Failed to export project");
     } finally {
       pendingActions.end("delivery");
     }
@@ -897,6 +932,7 @@ export default function ProjectWorkspaceClient() {
   async function handleGenerateDemo() {
     pendingActions.begin("demo");
     setError(null);
+    setErrorHint(null);
     try {
       const run = await fetchJson<GenerationRun>(
         demoGenerateEndpoint(apiBaseUrl, projectId),
@@ -910,7 +946,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (demoError) {
-      setError(errorMessage(demoError, "Failed to generate demo"));
+      handleApiError(demoError, "Failed to generate demo");
     } finally {
       pendingActions.end("demo");
     }
@@ -919,6 +955,7 @@ export default function ProjectWorkspaceClient() {
   async function handleRetryRun(runId: string) {
     pendingActions.begin("tasks");
     setError(null);
+    setErrorHint(null);
     try {
       const run = await fetchJson<GenerationRun>(
         taskRetryEndpoint(apiBaseUrl, runId),
@@ -928,7 +965,7 @@ export default function ProjectWorkspaceClient() {
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (retryError) {
-      setError(errorMessage(retryError, "Failed to retry demo"));
+      handleApiError(retryError, "Failed to retry demo");
     } finally {
       pendingActions.end("tasks");
     }
@@ -937,6 +974,7 @@ export default function ProjectWorkspaceClient() {
   async function handleCancelRun(runId: string) {
     pendingActions.begin("tasks");
     setError(null);
+    setErrorHint(null);
     try {
       const run = await fetchJson<GenerationRun>(
         taskCancelEndpoint(apiBaseUrl, runId),
@@ -948,7 +986,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (cancelError) {
-      setError(errorMessage(cancelError, "Failed to cancel task"));
+      handleApiError(cancelError, "Failed to cancel task");
     } finally {
       pendingActions.end("tasks");
     }
@@ -963,6 +1001,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("revision");
     setError(null);
+    setErrorHint(null);
     try {
       const revision = await fetchJson<RevisionRequest>(
         revisionsEndpoint(apiBaseUrl, projectId),
@@ -977,7 +1016,7 @@ export default function ProjectWorkspaceClient() {
       setRevisionFeedback("");
       await loadWorkspace();
     } catch (revisionError) {
-      setError(errorMessage(revisionError, "Failed to plan revision"));
+      handleApiError(revisionError, "Failed to plan revision");
     } finally {
       pendingActions.end("revision");
     }
@@ -986,6 +1025,7 @@ export default function ProjectWorkspaceClient() {
   async function handleApplyRevision(revisionId: string, regenerateDemo: boolean) {
     pendingActions.begin("revision");
     setError(null);
+    setErrorHint(null);
     try {
       const result = await fetchJson<RevisionApplyResponse>(
         revisionApplyEndpoint(apiBaseUrl, projectId, revisionId),
@@ -1001,7 +1041,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (applyError) {
-      setError(errorMessage(applyError, "Failed to apply revision"));
+      handleApiError(applyError, "Failed to apply revision");
     } finally {
       pendingActions.end("revision");
     }
@@ -1010,6 +1050,7 @@ export default function ProjectWorkspaceClient() {
   async function handleRejectRevision(revisionId: string) {
     pendingActions.begin("revision");
     setError(null);
+    setErrorHint(null);
     try {
       const revision = await fetchJson<RevisionRequest>(
         revisionRejectEndpoint(apiBaseUrl, projectId, revisionId),
@@ -1021,7 +1062,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (rejectError) {
-      setError(errorMessage(rejectError, "Failed to reject revision"));
+      handleApiError(rejectError, "Failed to reject revision");
     } finally {
       pendingActions.end("revision");
     }
@@ -1036,6 +1077,7 @@ export default function ProjectWorkspaceClient() {
     }
     pendingActions.begin("collaboration");
     setError(null);
+    setErrorHint(null);
     try {
       const target = parseCommentTarget(commentTargetValue);
       const comment = await fetchJson<ProjectComment>(
@@ -1056,7 +1098,7 @@ export default function ProjectWorkspaceClient() {
       setCommentBody("");
       await loadWorkspace();
     } catch (commentError) {
-      setError(errorMessage(commentError, "Failed to create comment"));
+      handleApiError(commentError, "Failed to create comment");
     } finally {
       pendingActions.end("collaboration");
     }
@@ -1065,6 +1107,7 @@ export default function ProjectWorkspaceClient() {
   async function handleUpdateComment(commentId: string, status: ProjectComment["status"]) {
     pendingActions.begin("collaboration");
     setError(null);
+    setErrorHint(null);
     try {
       const comment = await fetchJson<ProjectComment>(
         projectCommentEndpoint(apiBaseUrl, projectId, commentId),
@@ -1080,7 +1123,7 @@ export default function ProjectWorkspaceClient() {
       );
       await loadWorkspace();
     } catch (commentError) {
-      setError(errorMessage(commentError, "Failed to update comment"));
+      handleApiError(commentError, "Failed to update comment");
     } finally {
       pendingActions.end("collaboration");
     }
@@ -1093,6 +1136,7 @@ export default function ProjectWorkspaceClient() {
   ) {
     pendingActions.begin("revision");
     setError(null);
+    setErrorHint(null);
     try {
       const diff = await fetchJson<VersionDiff>(
         versionDiffEndpoint(apiBaseUrl, projectId, assetType, leftId, rightId),
@@ -1100,7 +1144,7 @@ export default function ProjectWorkspaceClient() {
       );
       setVersionDiff(diff);
     } catch (diffError) {
-      setError(errorMessage(diffError, "Failed to compare versions"));
+      handleApiError(diffError, "Failed to compare versions");
     } finally {
       pendingActions.end("revision");
     }
@@ -1109,6 +1153,7 @@ export default function ProjectWorkspaceClient() {
   async function handleRestoreVersion(assetType: RestoreAssetType, versionId: string) {
     pendingActions.begin("revision");
     setError(null);
+    setErrorHint(null);
     try {
       await fetchJson<unknown>(versionRestoreEndpoint(apiBaseUrl, projectId), "Version restore", {
         method: "POST",
@@ -1117,7 +1162,7 @@ export default function ProjectWorkspaceClient() {
       });
       await loadWorkspace();
     } catch (restoreError) {
-      setError(errorMessage(restoreError, "Failed to restore version"));
+      handleApiError(restoreError, "Failed to restore version");
     } finally {
       pendingActions.end("revision");
     }
@@ -1138,6 +1183,7 @@ export default function ProjectWorkspaceClient() {
 
     pendingActions.begin("project");
     setError(null);
+    setErrorHint(null);
     try {
       const updatedProject = await fetchJson<Project>(
         projectDetailEndpoint(apiBaseUrl, projectId),
@@ -1153,7 +1199,7 @@ export default function ProjectWorkspaceClient() {
       );
       setProject(updatedProject);
     } catch (updateError) {
-      setError(errorMessage(updateError, "Failed to update project"));
+      handleApiError(updateError, "Failed to update project");
     } finally {
       pendingActions.end("project");
     }
@@ -1166,6 +1212,7 @@ export default function ProjectWorkspaceClient() {
 
     pendingActions.begin("project");
     setError(null);
+    setErrorHint(null);
     try {
       const updatedProject = await fetchJson<Project>(
         projectDetailEndpoint(apiBaseUrl, projectId),
@@ -1178,7 +1225,7 @@ export default function ProjectWorkspaceClient() {
       );
       setProject(updatedProject);
     } catch (statusError) {
-      setError(errorMessage(statusError, "Failed to update project status"));
+      handleApiError(statusError, "Failed to update project status");
     } finally {
       pendingActions.end("project");
     }
@@ -1189,11 +1236,13 @@ export default function ProjectWorkspaceClient() {
       <ProjectOverview
         description={projectDescriptionDraft}
         error={error}
+        errorHint={errorHint}
         handoff={projectHandoff}
         isLoading={isLoading}
         isSaving={pendingActions.isPending("project")}
         name={projectNameDraft}
         onDescriptionChange={setProjectDescriptionDraft}
+        onErrorHintAction={loadWorkspace}
         onNameChange={setProjectNameDraft}
         onRefresh={loadWorkspace}
         onStatusToggle={handleProjectStatusToggle}

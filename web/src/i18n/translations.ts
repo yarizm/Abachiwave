@@ -583,6 +583,15 @@ export function formatLocalizedError(
   error: unknown,
   fallback: TranslationKey,
 ): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errorCode" in error &&
+    typeof (error as { errorCode: unknown }).errorCode === "string"
+  ) {
+    const code = (error as { errorCode: string }).errorCode;
+    return errorCodeMessage(code, locale) ?? translate(locale, fallback);
+  }
   if (locale === "en" && error instanceof Error) {
     return error.message;
   }
@@ -590,12 +599,30 @@ export function formatLocalizedError(
   if (typeof error !== "object" || error === null) {
     return base;
   }
-  const status = "status" in error && typeof error.status === "number" ? ` (${error.status})` : "";
+  const status =
+    "status" in error && typeof error.status === "number"
+      ? ` (${error.status})`
+      : "";
   const requestId =
     "requestId" in error && typeof error.requestId === "string"
       ? ` - ${translate(locale, "Request ID: {id}", { id: error.requestId })}`
       : "";
   return `${base}${status}${requestId}`;
+}
+
+export function formatLocalizedHint(
+  locale: Locale,
+  error: unknown,
+): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "hint" in error &&
+    typeof (error as { hint: unknown }).hint === "string"
+  ) {
+    return hintActionMessage((error as { hint: string }).hint, locale);
+  }
+  return null;
 }
 
 function interpolate(template: string, params: TranslationParams): string {
@@ -714,4 +741,74 @@ function translatePattern(value: string): string | null {
       .join(" · ");
   }
   return null;
+}
+
+// ─── error_code / hint resolution (phase 1) ────────────────────────────────
+
+const ERROR_CODE_EN: Record<string, string> = {
+  resource_not_found: "Resource not found",
+  song_spec_not_approved: "SongSpec must be approved first",
+  prerequisites_missing: "Required assets are missing",
+  asset_version_conflict: "Concurrent edit detected — retry",
+  upload_too_large: "File exceeds 25 MB limit",
+  unsupported_media_type: "Unsupported audio format",
+  validation_failed: "Validation failed",
+  chord_theory_error: "Invalid chord input",
+  song_spec_incomplete: "SongSpec has missing fields",
+  internal_error: "Unexpected server error",
+};
+
+const ERROR_CODE_ZH: Record<string, string> = {
+  resource_not_found: "未找到资源",
+  song_spec_not_approved: "请先确认 SongSpec",
+  prerequisites_missing: "所需资产缺失",
+  asset_version_conflict: "检测到并发编辑，请重试",
+  upload_too_large: "文件超过 25 MB 限制",
+  unsupported_media_type: "不支持的音频格式",
+  validation_failed: "校验失败",
+  chord_theory_error: "和弦输入无效",
+  song_spec_incomplete: "SongSpec 字段不全",
+  internal_error: "服务器内部错误",
+};
+
+const HINT_EN: Record<string, string> = {
+  retry: "Retry",
+  approve_song_spec: "Approve SongSpec",
+  check_prerequisites: "Generate missing assets first",
+  trim_audio_under_25mb: "Use a file under 25 MB",
+  check_format: "Use WAV format",
+  check_required_fields: "Fill in required fields",
+  check_chord_symbol: "Check chord symbol or timing",
+  contact_support: "Contact support",
+};
+
+const HINT_ZH: Record<string, string> = {
+  retry: "重试",
+  approve_song_spec: "去确认 SongSpec",
+  check_prerequisites: "先生成缺失的资产",
+  trim_audio_under_25mb: "使用 25 MB 以内的文件",
+  check_format: "使用 WAV 格式",
+  check_required_fields: "填写必填字段",
+  check_chord_symbol: "检查和弦符号或节拍",
+  contact_support: "联系支持",
+};
+
+export function errorCodeMessage(
+  code: string | null | undefined,
+  locale: Locale,
+): string | null {
+  if (!code) return null;
+  return locale === "zh-CN"
+    ? (ERROR_CODE_ZH[code] ?? code)
+    : (ERROR_CODE_EN[code] ?? code);
+}
+
+export function hintActionMessage(
+  hint: string | null | undefined,
+  locale: Locale,
+): string | null {
+  if (!hint) return null;
+  return locale === "zh-CN"
+    ? (HINT_ZH[hint] ?? hint)
+    : (HINT_EN[hint] ?? hint);
 }

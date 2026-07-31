@@ -9,8 +9,10 @@ import {
   TranslationParams,
   formatDateTime,
   formatLocalizedError,
+  formatLocalizedHint,
   translate,
   translateText,
+  errorCodeMessage,
 } from "@/i18n/translations";
 
 type LocaleContextValue = {
@@ -20,6 +22,8 @@ type LocaleContextValue = {
   text: (value: string) => string;
   dateTime: (value: string) => string;
   errorMessage: (error: unknown, fallback: TranslationKey) => string;
+  errorHint: (error: unknown) => string | null;
+  errorCodeLabel: (error: unknown) => string | null;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -44,6 +48,18 @@ export function LocaleProvider({
       text: (textValue) => translateText(locale, textValue),
       dateTime: (dateValue) => formatDateTime(locale, dateValue),
       errorMessage: (error, fallback) => formatLocalizedError(locale, error, fallback),
+      errorHint: (error) => formatLocalizedHint(locale, error),
+      errorCodeLabel: (error) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "errorCode" in error &&
+          typeof (error as { errorCode: unknown }).errorCode === "string"
+        ) {
+          return errorCodeMessage((error as { errorCode: string }).errorCode, locale);
+        }
+        return null;
+      },
     }),
     [locale],
   );

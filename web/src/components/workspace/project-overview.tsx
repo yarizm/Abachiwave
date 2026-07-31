@@ -11,11 +11,13 @@ import { ProjectHandoff, ProjectReview } from "@/lib/composition";
 type ProjectOverviewProps = {
   description: string;
   error: string | null;
+  errorHint: string | null;
   handoff: ProjectHandoff | null;
   isLoading: boolean;
   isSaving: boolean;
   name: string;
   onDescriptionChange: (value: string) => void;
+  onErrorHintAction: () => void;
   onNameChange: (value: string) => void;
   onRefresh: () => void;
   onStatusToggle: () => void;
@@ -27,11 +29,13 @@ type ProjectOverviewProps = {
 export function ProjectOverview({
   description,
   error,
+  errorHint,
   handoff,
   isLoading,
   isSaving,
   name,
   onDescriptionChange,
+  onErrorHintAction,
   onNameChange,
   onRefresh,
   onStatusToggle,
@@ -59,7 +63,20 @@ export function ProjectOverview({
         </button>
       </section>
 
-      {error ? <div className="notice error">{error}</div> : null}
+      {error ? (
+        <div className="notice error" role="alert">
+          <p>{error}</p>
+          {errorHint ? (
+            <button
+              className="button secondary compact-button"
+              onClick={onErrorHintAction}
+              type="button"
+            >
+              {errorHint}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <ReviewPanel review={review} />
       <HandoffPanel handoff={handoff} />
