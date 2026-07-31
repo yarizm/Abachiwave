@@ -17,6 +17,7 @@ import {
   pushLyricsHistory,
   redoLyricsHistory,
   removeLyricLine,
+  selectionResetKey,
   undoLyricsHistory,
   updateLyricLine,
 } from "./lyrics-editor";
@@ -98,4 +99,11 @@ test("local draft validation rejects corruption and equality ignores derived met
   assert.equal(isLyricsDraft(baseline), true);
   assert.equal(isLyricsDraft({ sections: [{}], hookCandidates: [] }), false);
   assert.equal(lyricsDraftsEqual(baseline, recalculated), true);
+});
+
+test("selection reset key is stable across object identities of the same version", () => {
+  assert.equal(selectionResetKey(null), "none");
+  assert.equal(selectionResetKey({ id: "v1" }), "v1");
+  assert.equal(selectionResetKey({ id: "v1" }), selectionResetKey({ id: "v1" }));
+  assert.notEqual(selectionResetKey({ id: "v1" }), selectionResetKey({ id: "v2" }));
 });

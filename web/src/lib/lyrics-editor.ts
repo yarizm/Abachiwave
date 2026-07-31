@@ -384,3 +384,12 @@ function editableLyricsDraft(draft: LyricsDraft) {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+/**
+ * Key for the selection/preview reset effect: the version id, so refetched
+ * objects with identical content (every loadWorkspace creates fresh
+ * identities) do not discard the line the user is reviewing mid-rewrite.
+ */
+export function selectionResetKey(version: { id: string } | null): string {
+  return version?.id ?? "none";
+}

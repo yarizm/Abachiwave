@@ -13,7 +13,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLyricsDraft } from "@/app/projects/[projectId]/hooks/use-lyrics-draft";
 import { useLocale } from "@/i18n/locale-provider";
@@ -35,6 +35,7 @@ import {
   moveLyricLine,
   parseLyricTerms,
   removeLyricLine,
+  selectionResetKey,
   updateHookCandidate,
   updateLyricLine,
 } from "@/lib/lyrics-editor";
@@ -94,14 +95,20 @@ export function LyricsWorkspace({
   const [preview, setPreview] = useState<LyricsRewritePreview | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const preferencesKey = `abachiwave:lyrics-preferences:${projectId}`;
+  const selectionKey = selectionResetKey(activeLyrics);
+  // Reset selection only when the active *version* changes; refetched objects
+  // with the same version id (every loadWorkspace) must not discard the line
+  // the user is reviewing mid-rewrite.
+  const activeLyricsRef = useRef(activeLyrics);
+  activeLyricsRef.current = activeLyrics;
 
   useEffect(() => {
-    const firstSection = activeLyrics?.sections[0] ?? null;
+    const firstSection = activeLyricsRef.current?.sections[0] ?? null;
     setSelectedSectionId(firstSection?.section_id ?? null);
     setSelectedLineId(firstSection?.lines[0]?.line_id ?? null);
     setPreview(null);
     setLocalError(null);
-  }, [activeLyrics]);
+  }, [selectionKey]);
 
   useEffect(() => {
     try {
