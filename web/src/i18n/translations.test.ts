@@ -6,6 +6,8 @@ import {
   formatLocalizedHint,
   hintActionMessage,
   isLocale,
+  resolveInitialTheme,
+  toggleThemeValue,
   translate,
   translateText,
 } from "./translations";
@@ -59,4 +61,17 @@ test("formatLocalizedHint reads the hint off error objects only", () => {
   assert.equal(formatLocalizedHint("en", { hint: "check_chord_symbol" }), "Check chord symbol or timing");
   assert.equal(formatLocalizedHint("zh-CN", { status: 500 }), null);
   assert.equal(formatLocalizedHint("zh-CN", new Error("x")), null);
+});
+
+test("resolveInitialTheme honors a valid cookie and falls back deliberately", () => {
+  assert.equal(resolveInitialTheme("dark"), "dark");
+  assert.equal(resolveInitialTheme(undefined), "light");
+  assert.equal(resolveInitialTheme("garbage", "dark"), "dark");
+  assert.equal(resolveInitialTheme(undefined, "dark"), "dark");
+  assert.equal(resolveInitialTheme("light", "dark"), "light");
+});
+
+test("toggleThemeValue flips between the two themes", () => {
+  assert.equal(toggleThemeValue("dark"), "light");
+  assert.equal(toggleThemeValue("light"), "dark");
 });
