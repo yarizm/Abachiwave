@@ -33,6 +33,7 @@ from abachiwave.schemas.revisions import (
     VersionReference,
     VersionRestoreRead,
 )
+from abachiwave.schemas.song_specs import canonical_section_slug
 from abachiwave.services.composition import (
     MIDI_CONTENT_TYPE,
     lyrics_version_to_read,
@@ -603,7 +604,7 @@ async def _apply_arrangement_task(
 
 
 def _revise_lyric_section(section: LyricSection, task: RevisionTask) -> LyricSection:
-    if task.target_section_id and task.target_section_id not in section.section_id.lower():
+    if not _section_matches_task(section, task):
         return section
     text = f"{section.text}\nRevision: make this section more direct, vivid, and singable."
     return LyricSection(
@@ -624,7 +625,7 @@ def _revise_arrangement_section(
     section: ArrangementSection,
     task: RevisionTask,
 ) -> ArrangementSection:
-    if task.target_section_id and task.target_section_id not in section.section_id.lower():
+    if not _section_matches_task(section, task):
         return section
     lowered = task.summary.lower()
     instruments = section.instruments
@@ -810,20 +811,34 @@ def _mentions_arrangement(value: str) -> bool:
     )
 
 
+# Longer synonyms must come before shorter ones that are substrings of them
+# ("pre chorus" contains "chorus"), so the most specific section wins.
+_SECTION_SYNONYMS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("pre chorus", "pre-chorus", "pre_chorus", "预副歌", "导歌"), "pre-chorus"),
+    (("final chorus", "final-chorus", "final_chorus", "末副歌"), "final-chorus"),
+    (("chorus", "副歌"), "chorus"),
+    (("verse", "主歌"), "verse"),
+    (("bridge", "桥段"), "bridge"),
+    (("intro", "前奏"), "intro"),
+    (("outro", "尾奏"), "outro"),
+    (("hook",), "hook"),
+)
+
+
 def _target_section_id(feedback: str) -> str | None:
     normalized = feedback.lower()
-    candidates = (
-        ("副歌", "chorus"),
-        ("chorus", "chorus"),
-        ("桥段", "bridge"),
-        ("bridge", "bridge"),
-        ("前奏", "intro"),
-        ("intro", "intro"),
-        ("主歌", "verse"),
-        ("verse", "verse"),
-        ("hook", "hook"),
-    )
-    for token, section_id in candidates:
-        if token in normalized or token in feedback:
+    for tokens, section_id in _SECTION_SYNONYMS:
+        if any(token in normalized for token in tokens):
             return section_id
     return None
+
+
+def _section_matches_task(
+    section: LyricSection | ArrangementSection,
+    task: RevisionTask,
+) -> bool:
+    if task.target_section_id is None:
+        return True  # null target = revise all sections
+    return canonical_section_slug(task.target_section_id) == canonical_section_slug(
+        section.section_id
+    )

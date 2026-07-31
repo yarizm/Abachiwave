@@ -176,6 +176,64 @@ async def test_lyrics_revision_plans_then_applies_without_mutating_before_apply(
 
 
 @pytest.mark.asyncio
+async def test_revision_pre_chorus_target_plans_canonical_section(
+    client_with_revision_deps: tuple[AsyncClient, MemoryStorage, FakeQueue],
+) -> None:
+    client, _storage, _queue = client_with_revision_deps
+    project_id, _lyrics, _chords, _midi_assets, _arrangement = (
+        await _create_full_asset_chain(client)
+    )
+
+    plan_response = await client.post(
+        f"/api/v1/projects/{project_id}/revisions",
+        json={"feedback": "让 pre chorus 的歌词更有力量"},
+    )
+
+    assert plan_response.status_code == 201
+    revision = plan_response.json()
+    assert revision["tasks"][0]["target_section_id"] == "pre-chorus"
+
+    apply_response = await client.post(
+        f"/api/v1/projects/{project_id}/revisions/{revision['id']}/apply",
+        json={"regenerate_demo": True},
+    )
+    assert apply_response.status_code == 200
+
+    lyrics_after_apply = (await client.get(f"/api/v1/projects/{project_id}/lyrics")).json()
+    sections = lyrics_after_apply[0]["sections"]
+    marked = {section["section_id"] for section in sections if "Revision:" in section["text"]}
+    assert marked == {"pre-chorus"}
+
+
+@pytest.mark.asyncio
+async def test_revision_chorus_target_does_not_hit_pre_and_final_chorus(
+    client_with_revision_deps: tuple[AsyncClient, MemoryStorage, FakeQueue],
+) -> None:
+    client, _storage, _queue = client_with_revision_deps
+    project_id, _lyrics, _chords, _midi_assets, _arrangement = (
+        await _create_full_asset_chain(client)
+    )
+
+    plan_response = await client.post(
+        f"/api/v1/projects/{project_id}/revisions",
+        json={"feedback": "副歌歌词更有力量"},
+    )
+    assert plan_response.status_code == 201
+    revision = plan_response.json()
+
+    apply_response = await client.post(
+        f"/api/v1/projects/{project_id}/revisions/{revision['id']}/apply",
+        json={"regenerate_demo": True},
+    )
+    assert apply_response.status_code == 200
+
+    lyrics_after_apply = (await client.get(f"/api/v1/projects/{project_id}/lyrics")).json()
+    sections = lyrics_after_apply[0]["sections"]
+    marked = {section["section_id"] for section in sections if "Revision:" in section["text"]}
+    assert marked == {"chorus"}
+
+
+@pytest.mark.asyncio
 async def test_melody_revision_diff_and_restore(
     client_with_revision_deps: tuple[AsyncClient, MemoryStorage, FakeQueue],
 ) -> None:
