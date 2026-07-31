@@ -25,7 +25,7 @@ from abachiwave.models.ai import (
 from abachiwave.models.composition import MidiAssetKind
 from abachiwave.models.demo import GenerationRun, GenerationRunStatus, GenerationRunType
 from abachiwave.models.project import Project
-from abachiwave.models.revision import RevisionRequest
+from abachiwave.models.revision import RevisionRequest, RevisionTaskTarget
 from abachiwave.models.song_spec import IdeaIntakeStatus, SongSpecStatus, SongSpecVersion
 from abachiwave.schemas.ai import (
     CandidateGenerateRequest,
@@ -63,6 +63,7 @@ from abachiwave.services.text_provider import (
 )
 
 ALL_TEXT_CAPABILITIES = [workflow.value for workflow in TextWorkflow]
+REVISION_AVAILABLE_TARGETS = [target.value for target in RevisionTaskTarget]
 DEFAULT_PROVIDER_PARAMS: dict[str, object] = {"temperature": 0.7}
 
 
@@ -544,7 +545,10 @@ async def _prepare_candidate(
     return (
         PreparedCandidate(
             output_model=RevisionCandidateContent,
-            context={"feedback": feedback, "available_targets": ALL_TEXT_CAPABILITIES[1:]},
+            context={
+                "feedback": feedback,
+                "available_targets": REVISION_AVAILABLE_TARGETS,
+            },
             fallback=revision_content,
             source_asset_ids={
                 "affected_asset_ids": sorted(

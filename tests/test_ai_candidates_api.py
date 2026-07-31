@@ -9,7 +9,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.models.composition import MidiAssetKind, MidiAssetVersion
-from abachiwave.services.ai_generation import execute_candidate_generation
+from abachiwave.services.ai_generation import (
+    REVISION_AVAILABLE_TARGETS,
+    execute_candidate_generation,
+)
 from abachiwave.services.task_queue import get_text_generation_task_queue
 
 
@@ -20,6 +23,13 @@ class FakeTextQueue:
     async def enqueue_text_generation(self, run_id: UUID) -> str:
         self.enqueued.append(run_id)
         return f"text-job-{run_id}"
+
+
+def test_revision_available_targets_match_task_target_enum() -> None:
+    """The revision workflow must advertise only valid RevisionTaskTarget
+    values; 'revision' itself is not a valid task target and midi_melody
+    must be offered."""
+    assert set(REVISION_AVAILABLE_TARGETS) == {"lyrics", "midi_melody", "arrangement"}
 
 
 @pytest_asyncio.fixture
