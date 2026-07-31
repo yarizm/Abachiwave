@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from mido import MidiFile
+from mido import MetaMessage, MidiFile
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.models.composition import ChordProgressionVersion
@@ -498,3 +498,100 @@ async def test_composition_missing_resources_return_404(
     )
 
     assert response.status_code == 404
+
+
+def _chord_track_note_on_count(midi_bytes: bytes) -> int:
+    midi = MidiFile(file=BytesIO(midi_bytes))
+    for track in midi.tracks:
+        if any(
+            isinstance(message, MetaMessage) and message.type == "track_name"
+            and message.name == "Chord Progression"
+            for message in track
+        ):
+            return sum(1 for message in track if message.type == "note_on")
+    return -1
+
+
+@pytest.mark.asyncio
+async def test_midi_generation_with_legacy_chord_version_is_not_silent(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Pre-migration chord rows store no midi_notes; MIDI rendering must
+    normalize first or the chord track comes out completely silent."""
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+
+    async with session_factory() as session:
+        chord_version = ChordProgressionVersion(
+            id=str(uuid4()),
+            project_id=project_id,
+            song_spec_id=str(song_spec["id"]),
+            version_number=1,
+            key="E major",
+            tempo_bpm=128,
+            time_signature="4/4",
+            sections=[
+                {
+                    "section_id": "verse",
+                    "label": "Verse",
+                    "bars": 4,
+                    "chords": ["C", "G", "Am", "F"],
+                }
+            ],
+        )
+        session.add(chord_version)
+        await session.commit()
+        chord_id = chord_version.id
+
+    generate_response = await client.post(
+        f"/api/v1/projects/{project_id}/midi/generate",
+        json={"song_spec_id": song_spec["id"], "chord_version_id": chord_id, "kinds": ["chord"]},
+    )
+
+    assert generate_response.status_code == 201
+    asset_id = generate_response.json()[0]["id"]
+    download_response = await client.get(
+        f"/api/v1/projects/{project_id}/midi-assets/{asset_id}/download"
+    )
+    assert download_response.status_code == 200
+    assert _chord_track_note_on_count(download_response.content) > 0
+
+
+@pytest.mark.asyncio
+async def test_midi_generation_with_invalid_legacy_chord_symbol_returns_422(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+
+    async with session_factory() as session:
+        chord_version = ChordProgressionVersion(
+            id=str(uuid4()),
+            project_id=project_id,
+            song_spec_id=str(song_spec["id"]),
+            version_number=1,
+            key="E major",
+            tempo_bpm=128,
+            time_signature="4/4",
+            sections=[
+                {
+                    "section_id": "verse",
+                    "label": "Verse",
+                    "bars": 4,
+                    "chords": ["H#7", "G", "Am", "F"],
+                }
+            ],
+        )
+        session.add(chord_version)
+        await session.commit()
+        chord_id = chord_version.id
+
+    response = await client.post(
+        f"/api/v1/projects/{project_id}/midi/generate",
+        json={"song_spec_id": song_spec["id"], "chord_version_id": chord_id, "kinds": ["chord"]},
+    )
+
+    assert response.status_code == 422
+    assert response.headers["X-Error-Code"] == "chord_theory_error"

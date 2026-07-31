@@ -344,15 +344,23 @@ async def generate_midi_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="ChordProgressionVersion not found",
             )
-    versions = await generate_midi_asset_versions(
-        session=session,
-        project_id=project_id,
-        song_spec=song_spec,
-        lyrics_version=lyrics_version,
-        chord_version=chord_version,
-        kinds=payload.kinds,
-        storage=storage,
-    )
+    try:
+        versions = await generate_midi_asset_versions(
+            session=session,
+            project_id=project_id,
+            song_spec=song_spec,
+            lyrics_version=lyrics_version,
+            chord_version=chord_version,
+            kinds=payload.kinds,
+            storage=storage,
+        )
+    except ChordTheoryError as exc:
+        raise ProblemError(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            error_code=ErrorCode.CHORD_THEORY_ERROR,
+            detail=str(exc),
+            hint=ErrorHint.CHECK_CHORD_SYMBOL,
+        ) from exc
     return [midi_asset_to_read(version) for version in versions]
 
 

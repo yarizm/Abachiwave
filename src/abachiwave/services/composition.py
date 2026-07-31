@@ -590,8 +590,20 @@ def _chord_sections_for_midi(
     chord_version: ChordProgressionVersion | None,
 ) -> list[ChordSection]:
     if chord_version:
-        return [ChordSection.model_validate(section) for section in chord_version.sections]
-    return build_chords_from_song_spec(song_spec_data, lyric_sections)
+        sections = [
+            ChordSection.model_validate(section) for section in chord_version.sections
+        ]
+        return normalize_chord_sections(
+            sections,
+            key_name=chord_version.key,
+            time_signature=chord_version.time_signature,
+        )
+    sections = build_chords_from_song_spec(song_spec_data, lyric_sections)
+    return normalize_chord_sections(
+        sections,
+        key_name=song_spec_data.key or "C major",
+        time_signature=song_spec_data.time_signature or "4/4",
+    )
 
 
 async def _next_lyrics_version_number(session: AsyncSession, project_id: UUID) -> int:
