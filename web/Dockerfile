@@ -2,12 +2,16 @@ FROM node:22-alpine AS dependencies
 
 WORKDIR /app
 COPY web/package*.json ./
-RUN npm ci
+RUN npm ci && \
+    sha256sum package-lock.json | awk '{print $1}' > node_modules/.abachiwave-package-lock.sha256
 
 FROM dependencies AS development
 
 COPY web ./
+COPY web/docker/development-entrypoint.sh /usr/local/bin/abachiwave-web-entrypoint
+RUN chmod +x /usr/local/bin/abachiwave-web-entrypoint
 EXPOSE 3000
+ENTRYPOINT ["/usr/local/bin/abachiwave-web-entrypoint"]
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 FROM dependencies AS builder
