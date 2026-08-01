@@ -11,7 +11,11 @@ from pydantic import (
     model_validator,
 )
 
-from abachiwave.models.composition import ExportBundleStatus, MidiAssetKind
+from abachiwave.models.composition import (
+    ExportBundleStatus,
+    MidiAssetKind,
+    MidiTransformOperation,
+)
 
 _WORD_PATTERN = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
 _CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
@@ -442,6 +446,87 @@ class MidiGenerateRequest(BaseModel):
         return deduped
 
 
+class MidiNoteEvent(BaseModel):
+    note_id: str = Field(min_length=1, max_length=64)
+    section_id: str | None = Field(default=None, max_length=64)
+    pitch: int = Field(ge=0, le=127)
+    start_beat: float = Field(ge=0, le=100_000)
+    duration_beats: float = Field(gt=0, le=10_000)
+    velocity: int = Field(ge=1, le=127)
+    channel: int = Field(default=0, ge=0, le=15)
+
+    @field_validator("note_id")
+    @classmethod
+    def normalize_note_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("note_id must not be blank")
+        return normalized
+
+    @field_validator("section_id")
+    @classmethod
+    def normalize_section_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class MidiTempoEvent(BaseModel):
+    beat: float = Field(ge=0, le=100_000)
+    bpm: float = Field(ge=20, le=400)
+
+
+class MidiTimeSignatureEvent(BaseModel):
+    beat: float = Field(ge=0, le=100_000)
+    numerator: int = Field(ge=1, le=32)
+    denominator: int = Field(ge=1, le=32)
+
+    @field_validator("denominator")
+    @classmethod
+    def denominator_must_be_power_of_two(cls, value: int) -> int:
+        if value & (value - 1):
+            raise ValueError("denominator must be a power of two")
+        return value
+
+
+class MidiAssetUpdate(BaseModel):
+    note_events: list[MidiNoteEvent] = Field(max_length=20_000)
+    tempo_map: list[MidiTempoEvent] | None = Field(default=None, max_length=128)
+    time_signature_map: list[MidiTimeSignatureEvent] | None = Field(
+        default=None,
+        max_length=128,
+    )
+
+    @field_validator("note_events")
+    @classmethod
+    def note_ids_must_be_unique(cls, value: list[MidiNoteEvent]) -> list[MidiNoteEvent]:
+        note_ids = [event.note_id for event in value]
+        if len(note_ids) != len(set(note_ids)):
+            raise ValueError("note_ids must be unique")
+        return sorted(value, key=lambda event: (event.start_beat, event.pitch, event.note_id))
+
+
+class MidiTransformRequest(BaseModel):
+    midi_asset_id: UUID
+    operation: MidiTransformOperation
+    note_ids: list[str] | None = Field(default=None, min_length=1, max_length=20_000)
+    grid_beats: float = Field(default=0.25, gt=0, le=16)
+    semitones: int = Field(default=0, ge=-48, le=48)
+    velocity_delta: int = Field(default=0, ge=-126, le=126)
+    legato_gap_beats: float = Field(default=0.05, ge=0, le=4)
+    humanize_beats: float = Field(default=0.04, ge=0, le=0.5)
+
+    @field_validator("note_ids")
+    @classmethod
+    def normalize_note_ids(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = list(dict.fromkeys(note_id.strip() for note_id in value if note_id.strip()))
+        if not normalized:
+            raise ValueError("note_ids must not be empty")
+        return normalized
+
+
 class MidiAssetVersionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -450,8 +535,13 @@ class MidiAssetVersionRead(BaseModel):
     song_spec_id: UUID
     lyrics_version_id: UUID | None
     chord_version_id: UUID | None
+    parent_version_id: UUID | None
     version_number: int
     kind: MidiAssetKind
+    schema_version: int
+    note_events: list[MidiNoteEvent]
+    tempo_map: list[MidiTempoEvent]
+    time_signature_map: list[MidiTimeSignatureEvent]
     source_revision_request_id: UUID | None
     source_audio_upload_id: UUID | None
     filename: str

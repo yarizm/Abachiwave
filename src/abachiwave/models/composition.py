@@ -24,6 +24,15 @@ class MidiAssetKind(StrEnum):
     hook = "hook"
 
 
+class MidiTransformOperation(StrEnum):
+    quantize = "quantize"
+    transpose = "transpose"
+    velocity = "velocity"
+    legato = "legato"
+    humanize = "humanize"
+    scale_snap = "scale_snap"
+
+
 class ExportBundleStatus(StrEnum):
     ready = "ready"
     failed = "failed"
@@ -191,8 +200,38 @@ class MidiAssetVersion(Base):
         nullable=True,
         index=True,
     )
+    parent_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("midi_asset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     kind: Mapped[MidiAssetKind] = mapped_column(String(16), nullable=False, index=True)
+    schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="1",
+    )
+    note_events: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    tempo_map: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    time_signature_map: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
     storage_key: Mapped[str] = mapped_column(Text, nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(

@@ -61,6 +61,25 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         }
     assert "schema_version" in chord_columns
     with sqlite3.connect(db_path) as connection:
+        midi_columns = {
+            row[1]
+            for row in connection.execute("pragma table_info(midi_asset_versions)").fetchall()
+        }
+        midi_foreign_keys = connection.execute(
+            "pragma foreign_key_list(midi_asset_versions)"
+        ).fetchall()
+    assert {
+        "parent_version_id",
+        "schema_version",
+        "note_events",
+        "tempo_map",
+        "time_signature_map",
+    }.issubset(midi_columns)
+    assert any(
+        row[2] == "midi_asset_versions" and row[3] == "parent_version_id"
+        for row in midi_foreign_keys
+    )
+    with sqlite3.connect(db_path) as connection:
         demo_columns = {
             row[1]
             for row in connection.execute("pragma table_info(audio_demo_versions)").fetchall()

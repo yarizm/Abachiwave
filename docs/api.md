@@ -141,7 +141,9 @@ usage, and anonymous A/B pairs. Private A/B assignments are not returned by the 
 | POST | `/api/v1/projects/{project_id}/chords/{chord_version_id}/preview` | Validate an unsaved progression and return theory/playback data without creating a version |
 | POST | `/api/v1/projects/{project_id}/chords/{chord_version_id}/transpose` | Create a transposed full-song or selected-section version |
 | POST | `/api/v1/projects/{project_id}/midi/generate` | Generate MIDI assets |
+| POST | `/api/v1/projects/{project_id}/midi/transform` | Create a transformed MIDI version |
 | GET | `/api/v1/projects/{project_id}/midi-assets` | List MIDI assets |
+| PATCH | `/api/v1/projects/{project_id}/midi-assets/{midi_asset_id}` | Save edited notes as a new MIDI version |
 | GET | `/api/v1/projects/{project_id}/midi-assets/{midi_asset_id}/download` | Download MIDI |
 | POST | `/api/v1/projects/{project_id}/arrangement/generate` | Generate an arrangement |
 | GET | `/api/v1/projects/{project_id}/arrangements` | List arrangement versions |
@@ -173,6 +175,16 @@ bounds and overlap, and returns normalized theory data without a database write.
 endpoint accepts `{ "semitones": -11..11, "section_ids"?: string[] }`; omitting `section_ids`
 transposes the key and complete progression, while a selection keeps the project key and analyzes
 the moved section as modal/borrowed harmony. Both save and transpose preserve immutable history.
+
+MIDI schema version 2 stores stable `note_events`, a `tempo_map`, and a
+`time_signature_map` beside the binary object. Each note includes `note_id`, optional
+`section_id`, pitch, start/duration in quarter-note beats, velocity, and channel. `PATCH` accepts
+the complete edited note set and creates a child version; it never mutates the source row.
+`POST /midi/transform` accepts a source `midi_asset_id`, an operation (`quantize`, `transpose`,
+`velocity`, `legato`, `humanize`, or `scale_snap`), and optional selected `note_ids`. Transform
+results are also immutable child versions, and their downloaded MIDI file is deterministically
+rebuilt from the structured data. Pre-v2 MIDI remains downloadable but has no editable piano-roll
+data until regenerated or restored through a v2 editing workflow.
 
 ## Demo and tasks
 

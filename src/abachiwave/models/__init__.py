@@ -21,6 +21,7 @@ from abachiwave.models.composition import (
     LyricsVersion,
     MidiAssetKind,
     MidiAssetVersion,
+    MidiTransformOperation,
 )
 from abachiwave.models.demo import (
     AudioDemoVersion,
@@ -65,6 +66,7 @@ __all__ = [
     "LyricsVersion",
     "MidiAssetKind",
     "MidiAssetVersion",
+    "MidiTransformOperation",
     "Project",
     "ProjectComment",
     "ProjectCommentStatus",

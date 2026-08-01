@@ -49,6 +49,7 @@ from abachiwave.services.delivery import (
 )
 from abachiwave.services.demo import get_demo_version
 from abachiwave.services.events import add_project_event
+from abachiwave.services.midi_document import parse_midi_document
 from abachiwave.services.revision_diff import (
     build_arrangement_diff,
     build_demo_diff,
@@ -512,6 +513,7 @@ async def _apply_melody_task(
         return None
     data = storage.get_bytes(current.storage_key)
     raised_data = _transpose_midi(data, semitones=2)
+    document = parse_midi_document(raised_data)
 
     def build_version(version_number: int) -> MidiAssetVersion:
         asset_id = str(uuid4())
@@ -524,8 +526,15 @@ async def _apply_melody_task(
             chord_version_id=current.chord_version_id,
             source_revision_request_id=str(revision_id),
             source_audio_upload_id=current.source_audio_upload_id,
+            parent_version_id=current.id,
             version_number=version_number,
             kind=MidiAssetKind.melody,
+            schema_version=2,
+            note_events=[event.model_dump(mode="json") for event in document.note_events],
+            tempo_map=[event.model_dump(mode="json") for event in document.tempo_map],
+            time_signature_map=[
+                event.model_dump(mode="json") for event in document.time_signature_map
+            ],
             storage_key=f"projects/{project_id}/midi/{asset_id}/{filename}",
             filename=filename,
             content_type=MIDI_CONTENT_TYPE,
@@ -656,6 +665,7 @@ async def _copy_midi_version(
     source_revision_request_id: UUID | None,
 ) -> MidiAssetVersion:
     data = storage.get_bytes(source.storage_key)
+    document = parse_midi_document(data)
 
     def build_restored(version_number: int) -> MidiAssetVersion:
         asset_id = str(uuid4())
@@ -670,8 +680,15 @@ async def _copy_midi_version(
                 str(source_revision_request_id) if source_revision_request_id else None
             ),
             source_audio_upload_id=source.source_audio_upload_id,
+            parent_version_id=source.id,
             version_number=version_number,
             kind=MidiAssetKind.melody,
+            schema_version=2,
+            note_events=[event.model_dump(mode="json") for event in document.note_events],
+            tempo_map=[event.model_dump(mode="json") for event in document.tempo_map],
+            time_signature_map=[
+                event.model_dump(mode="json") for event in document.time_signature_map
+            ],
             storage_key=f"projects/{project_id}/midi/{asset_id}/{filename}",
             filename=filename,
             content_type=source.content_type,

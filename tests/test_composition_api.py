@@ -464,6 +464,10 @@ async def test_midi_generation_listing_and_download(
     assert len(storage.objects) == 3
     assert all(asset["checksum"] for asset in assets)
     assert all(asset["size_bytes"] > 0 for asset in assets)
+    assert all(asset["schema_version"] == 2 for asset in assets)
+    assert all(asset["note_events"] for asset in assets)
+    assert all(asset["tempo_map"][0]["bpm"] == 128 for asset in assets)
+    assert all(asset["time_signature_map"][0]["numerator"] == 4 for asset in assets)
 
     download_response = await client.get(
         f"/api/v1/projects/{project_id}/midi-assets/{assets[0]['id']}/download"
@@ -483,6 +487,104 @@ async def test_midi_generation_listing_and_download(
     ]
     assert len(midi_events) == 3
     assert {event["payload"]["kind"] for event in midi_events} == {"chord", "melody", "hook"}
+
+
+@pytest.mark.asyncio
+async def test_midi_edit_and_transform_create_parseable_immutable_versions(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+) -> None:
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+    lyrics = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/lyrics/generate",
+            json={"song_spec_id": song_spec["id"]},
+        )
+    ).json()
+    chords = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/chords/generate",
+            json={"song_spec_id": song_spec["id"], "lyrics_version_id": lyrics["id"]},
+        )
+    ).json()
+    generated = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/midi/generate",
+            json={
+                "song_spec_id": song_spec["id"],
+                "lyrics_version_id": lyrics["id"],
+                "chord_version_id": chords["id"],
+                "kinds": ["melody"],
+            },
+        )
+    ).json()[0]
+    original_pitch = generated["note_events"][0]["pitch"]
+    edited_notes = [dict(note) for note in generated["note_events"]]
+    edited_notes[0]["pitch"] = min(127, original_pitch + 1)
+
+    edit_response = await client.patch(
+        f"/api/v1/projects/{project_id}/midi-assets/{generated['id']}",
+        json={"note_events": edited_notes},
+    )
+
+    assert edit_response.status_code == 200
+    edited = edit_response.json()
+    assert edited["version_number"] == 2
+    assert edited["parent_version_id"] == generated["id"]
+    assert edited["note_events"][0]["pitch"] == min(127, original_pitch + 1)
+
+    transform_response = await client.post(
+        f"/api/v1/projects/{project_id}/midi/transform",
+        json={
+            "midi_asset_id": edited["id"],
+            "operation": "transpose",
+            "note_ids": [edited["note_events"][0]["note_id"]],
+            "semitones": 12,
+        },
+    )
+
+    assert transform_response.status_code == 201
+    transformed = transform_response.json()
+    assert transformed["version_number"] == 3
+    assert transformed["parent_version_id"] == edited["id"]
+    assert transformed["note_events"][0]["pitch"] == min(
+        127,
+        edited["note_events"][0]["pitch"] + 12,
+    )
+
+    versions = (await client.get(f"/api/v1/projects/{project_id}/midi-assets")).json()
+    melody_versions = [asset for asset in versions if asset["kind"] == "melody"]
+    assert [asset["version_number"] for asset in melody_versions] == [3, 2, 1]
+    assert melody_versions[-1]["note_events"][0]["pitch"] == original_pitch
+
+    download = await client.get(
+        f"/api/v1/projects/{project_id}/midi-assets/{transformed['id']}/download"
+    )
+    assert download.status_code == 200
+    parsed = MidiFile(file=BytesIO(download.content))
+    assert any(message.type == "note_on" for track in parsed.tracks for message in track)
+
+
+@pytest.mark.asyncio
+async def test_midi_edit_rejects_duplicate_note_ids(
+    client_with_storage: tuple[AsyncClient, MemoryStorage],
+) -> None:
+    client, _storage = client_with_storage
+    project_id, song_spec = await _create_song_spec(client, approve=True)
+    generated = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/midi/generate",
+            json={"song_spec_id": song_spec["id"], "kinds": ["melody"]},
+        )
+    ).json()[0]
+    duplicate = dict(generated["note_events"][0])
+
+    response = await client.patch(
+        f"/api/v1/projects/{project_id}/midi-assets/{generated['id']}",
+        json={"note_events": [duplicate, duplicate]},
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

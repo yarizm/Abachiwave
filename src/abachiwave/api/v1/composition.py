@@ -27,8 +27,10 @@ from abachiwave.schemas.composition import (
     LyricsGenerateRequest,
     LyricsUpdate,
     LyricsVersionRead,
+    MidiAssetUpdate,
     MidiAssetVersionRead,
     MidiGenerateRequest,
+    MidiTransformRequest,
 )
 from abachiwave.schemas.demo import GenerationRunRead
 from abachiwave.schemas.lyrics import LyricsRewritePreview, LyricsRewriteRequest
@@ -49,7 +51,9 @@ from abachiwave.services.composition import (
     lyrics_version_to_read,
     midi_asset_to_read,
     preview_chord_progression,
+    transform_midi_asset_version,
     transpose_chord_progression_version,
+    update_midi_asset_version,
 )
 from abachiwave.services.delivery import (
     arrangement_plan_to_read,
@@ -364,6 +368,31 @@ async def generate_midi_endpoint(
     return [midi_asset_to_read(version) for version in versions]
 
 
+@router.post(
+    "/{project_id}/midi/transform",
+    response_model=MidiAssetVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def transform_midi_endpoint(
+    project_id: UUID,
+    payload: MidiTransformRequest,
+    session: SessionDependency,
+    storage: StorageDependency,
+) -> MidiAssetVersionRead:
+    version = await transform_midi_asset_version(
+        session=session,
+        project_id=project_id,
+        payload=payload,
+        storage=storage,
+    )
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MidiAssetVersion not found",
+        )
+    return midi_asset_to_read(version)
+
+
 @router.get("/{project_id}/midi-assets", response_model=list[MidiAssetVersionRead])
 async def list_midi_assets_endpoint(
     project_id: UUID,
@@ -379,6 +408,32 @@ async def list_midi_assets_endpoint(
         offset=page.offset,
     )
     return [midi_asset_to_read(version) for version in versions]
+
+
+@router.patch(
+    "/{project_id}/midi-assets/{midi_asset_id}",
+    response_model=MidiAssetVersionRead,
+)
+async def update_midi_asset_endpoint(
+    project_id: UUID,
+    midi_asset_id: UUID,
+    payload: MidiAssetUpdate,
+    session: SessionDependency,
+    storage: StorageDependency,
+) -> MidiAssetVersionRead:
+    version = await update_midi_asset_version(
+        session=session,
+        project_id=project_id,
+        midi_asset_id=midi_asset_id,
+        payload=payload,
+        storage=storage,
+    )
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MidiAssetVersion not found",
+        )
+    return midi_asset_to_read(version)
 
 
 @router.get("/{project_id}/midi-assets/{midi_asset_id}/download")

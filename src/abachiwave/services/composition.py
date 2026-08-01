@@ -25,7 +25,12 @@ from abachiwave.schemas.composition import (
     LyricSection,
     LyricsUpdate,
     LyricsVersionRead,
+    MidiAssetUpdate,
     MidiAssetVersionRead,
+    MidiNoteEvent,
+    MidiTempoEvent,
+    MidiTimeSignatureEvent,
+    MidiTransformRequest,
 )
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.chord_theory import (
@@ -35,6 +40,12 @@ from abachiwave.services.chord_theory import (
 )
 from abachiwave.services.events import add_project_event
 from abachiwave.services.midi import build_midi_bytes
+from abachiwave.services.midi_document import (
+    MidiDocument,
+    parse_midi_document,
+    render_midi_document,
+    transform_midi_notes,
+)
 from abachiwave.services.song_specs import song_spec_to_data
 from abachiwave.services.storage import ObjectStorage
 from abachiwave.services.versioning import create_version_with_retry
@@ -100,8 +111,16 @@ def midi_asset_to_read(version: MidiAssetVersion) -> MidiAssetVersionRead:
         song_spec_id=UUID(version.song_spec_id),
         lyrics_version_id=UUID(version.lyrics_version_id) if version.lyrics_version_id else None,
         chord_version_id=UUID(version.chord_version_id) if version.chord_version_id else None,
+        parent_version_id=UUID(version.parent_version_id) if version.parent_version_id else None,
         version_number=version.version_number,
         kind=version.kind,
+        schema_version=version.schema_version,
+        note_events=[MidiNoteEvent.model_validate(event) for event in version.note_events],
+        tempo_map=[MidiTempoEvent.model_validate(event) for event in version.tempo_map],
+        time_signature_map=[
+            MidiTimeSignatureEvent.model_validate(event)
+            for event in version.time_signature_map
+        ],
         source_revision_request_id=(
             UUID(version.source_revision_request_id) if version.source_revision_request_id else None
         ),
@@ -417,8 +436,12 @@ async def create_midi_asset_version_from_bytes(
     storage: ObjectStorage,
     source_revision_request_id: UUID | None = None,
     source_audio_upload_id: UUID | None = None,
+    parent_version_id: UUID | None = None,
+    document: MidiDocument | None = None,
     commit: bool = True,
 ) -> MidiAssetVersion:
+    resolved_document = document or parse_midi_document(midi_bytes)
+
     def build_asset(version_number: int) -> MidiAssetVersion:
         asset_id = str(uuid4())
         resolved_filename = filename or f"{kind.value}-v{version_number}.mid"
@@ -434,8 +457,16 @@ async def create_midi_asset_version_from_bytes(
             source_audio_upload_id=(
                 str(source_audio_upload_id) if source_audio_upload_id else None
             ),
+            parent_version_id=str(parent_version_id) if parent_version_id else None,
             version_number=version_number,
             kind=kind,
+            schema_version=2,
+            note_events=[event.model_dump(mode="json") for event in resolved_document.note_events],
+            tempo_map=[event.model_dump(mode="json") for event in resolved_document.tempo_map],
+            time_signature_map=[
+                event.model_dump(mode="json")
+                for event in resolved_document.time_signature_map
+            ],
             storage_key=f"projects/{project_id}/midi/{asset_id}/{resolved_filename}",
             filename=resolved_filename,
             content_type=MIDI_CONTENT_TYPE,
@@ -463,7 +494,7 @@ async def create_midi_asset_version_from_bytes(
     add_project_event(
         session,
         project_id=project_id,
-        event_type="midi.generated",
+        event_type="midi.edited" if parent_version_id else "midi.generated",
         payload={
             "midi_asset_id": asset.id,
             "kind": kind.value,
@@ -476,6 +507,108 @@ async def create_midi_asset_version_from_bytes(
         await session.commit()
         await session.refresh(asset)
     return asset
+
+
+async def update_midi_asset_version(
+    *,
+    session: AsyncSession,
+    project_id: UUID,
+    midi_asset_id: UUID,
+    payload: MidiAssetUpdate,
+    storage: ObjectStorage,
+) -> MidiAssetVersion | None:
+    current = await get_midi_asset_version(session, project_id, midi_asset_id)
+    if current is None:
+        return None
+    current_document = _document_for_asset(current, storage)
+    document = MidiDocument(
+        note_events=payload.note_events,
+        tempo_map=payload.tempo_map or current_document.tempo_map,
+        time_signature_map=payload.time_signature_map or current_document.time_signature_map,
+    )
+    midi_bytes = render_midi_document(
+        kind=MidiAssetKind(current.kind),
+        note_events=document.note_events,
+        tempo_map=document.tempo_map,
+        time_signature_map=document.time_signature_map,
+    )
+    return await create_midi_asset_version_from_bytes(
+        session=session,
+        project_id=project_id,
+        song_spec_id=UUID(current.song_spec_id),
+        lyrics_version_id=UUID(current.lyrics_version_id) if current.lyrics_version_id else None,
+        chord_version_id=UUID(current.chord_version_id) if current.chord_version_id else None,
+        kind=MidiAssetKind(current.kind),
+        midi_bytes=midi_bytes,
+        filename=None,
+        storage=storage,
+        source_audio_upload_id=(
+            UUID(current.source_audio_upload_id) if current.source_audio_upload_id else None
+        ),
+        parent_version_id=UUID(current.id),
+        document=document,
+    )
+
+
+async def transform_midi_asset_version(
+    *,
+    session: AsyncSession,
+    project_id: UUID,
+    payload: MidiTransformRequest,
+    storage: ObjectStorage,
+) -> MidiAssetVersion | None:
+    current = await get_midi_asset_version(session, project_id, payload.midi_asset_id)
+    if current is None:
+        return None
+    document = _document_for_asset(current, storage)
+    song_spec = await session.get(SongSpecVersion, current.song_spec_id)
+    transformed_notes = transform_midi_notes(
+        document.note_events,
+        payload,
+        key_name=song_spec.key if song_spec and song_spec.key else "C major",
+    )
+    transformed = MidiDocument(
+        note_events=transformed_notes,
+        tempo_map=document.tempo_map,
+        time_signature_map=document.time_signature_map,
+    )
+    midi_bytes = render_midi_document(
+        kind=MidiAssetKind(current.kind),
+        note_events=transformed.note_events,
+        tempo_map=transformed.tempo_map,
+        time_signature_map=transformed.time_signature_map,
+    )
+    return await create_midi_asset_version_from_bytes(
+        session=session,
+        project_id=project_id,
+        song_spec_id=UUID(current.song_spec_id),
+        lyrics_version_id=UUID(current.lyrics_version_id) if current.lyrics_version_id else None,
+        chord_version_id=UUID(current.chord_version_id) if current.chord_version_id else None,
+        kind=MidiAssetKind(current.kind),
+        midi_bytes=midi_bytes,
+        filename=None,
+        storage=storage,
+        source_audio_upload_id=(
+            UUID(current.source_audio_upload_id) if current.source_audio_upload_id else None
+        ),
+        parent_version_id=UUID(current.id),
+        document=transformed,
+    )
+
+
+def _document_for_asset(version: MidiAssetVersion, storage: ObjectStorage) -> MidiDocument:
+    if version.schema_version >= 2 and (
+        version.note_events or version.tempo_map or version.time_signature_map
+    ):
+        return MidiDocument(
+            note_events=[MidiNoteEvent.model_validate(event) for event in version.note_events],
+            tempo_map=[MidiTempoEvent.model_validate(event) for event in version.tempo_map],
+            time_signature_map=[
+                MidiTimeSignatureEvent.model_validate(event)
+                for event in version.time_signature_map
+            ],
+        )
+    return parse_midi_document(storage.get_bytes(version.storage_key))
 
 
 async def _create_lyrics_version(
