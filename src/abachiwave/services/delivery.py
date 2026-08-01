@@ -164,13 +164,14 @@ async def get_arrangement_plan_version(
 async def get_latest_arrangement_plan_version(
     session: AsyncSession,
     project_id: UUID,
+    song_spec_id: UUID | None = None,
 ) -> ArrangementPlanVersion | None:
-    statement: Select[tuple[ArrangementPlanVersion]] = (
-        select(ArrangementPlanVersion)
-        .where(ArrangementPlanVersion.project_id == str(project_id))
-        .order_by(ArrangementPlanVersion.version_number.desc())
-        .limit(1)
+    statement: Select[tuple[ArrangementPlanVersion]] = select(ArrangementPlanVersion).where(
+        ArrangementPlanVersion.project_id == str(project_id)
     )
+    if song_spec_id is not None:
+        statement = statement.where(ArrangementPlanVersion.song_spec_id == str(song_spec_id))
+    statement = statement.order_by(ArrangementPlanVersion.version_number.desc()).limit(1)
     result = await session.execute(statement)
     return result.scalar_one_or_none()
 
@@ -187,7 +188,7 @@ async def resolve_arrangement_inputs(
     lyrics = (
         await get_lyrics_version(session, project_id, lyrics_version_id)
         if lyrics_version_id
-        else await get_latest_lyrics_version(session, project_id)
+        else await get_latest_lyrics_version(session, project_id, UUID(song_spec.id))
     )
     if lyrics_version_id and lyrics is None:
         return None, [], "LyricsVersion not found"
@@ -197,7 +198,7 @@ async def resolve_arrangement_inputs(
     chords = (
         await get_chord_progression_version(session, project_id, chord_version_id)
         if chord_version_id
-        else await get_latest_chord_progression_version(session, project_id)
+        else await get_latest_chord_progression_version(session, project_id, UUID(song_spec.id))
     )
     if chord_version_id and chords is None:
         return None, [], "ChordProgressionVersion not found"
@@ -212,7 +213,15 @@ async def resolve_arrangement_inputs(
                 return None, [], "MidiAssetVersion not found"
             midi_assets.append(asset)
     else:
-        midi_assets = list((await get_latest_midi_assets_by_kind(session, project_id)).values())
+        midi_assets = list(
+            (
+                await get_latest_midi_assets_by_kind(
+                    session,
+                    project_id,
+                    UUID(song_spec.id),
+                )
+            ).values()
+        )
     midi_by_kind = _latest_midi_by_kind(midi_assets)
     missing = _missing_composition_prerequisites(
         song_spec=song_spec,
@@ -294,10 +303,22 @@ async def build_asset_tree(session: AsyncSession, project_id: UUID) -> AssetTree
         (version for version in song_specs if version.status == SongSpecStatus.approved),
         None,
     )
-    latest_lyrics = lyrics_versions[0] if lyrics_versions else None
-    latest_chords = chord_versions[0] if chord_versions else None
-    latest_midi_by_kind = _latest_midi_by_kind(midi_assets)
-    latest_arrangement = arrangements[0] if arrangements else None
+    approved_id = approved_song_spec.id if approved_song_spec else None
+    latest_lyrics = next(
+        (version for version in lyrics_versions if version.song_spec_id == approved_id),
+        None,
+    )
+    latest_chords = next(
+        (version for version in chord_versions if version.song_spec_id == approved_id),
+        None,
+    )
+    latest_midi_by_kind = _latest_midi_by_kind(
+        asset for asset in midi_assets if asset.song_spec_id == approved_id
+    )
+    latest_arrangement = next(
+        (version for version in arrangements if version.song_spec_id == approved_id),
+        None,
+    )
     arrangement_midi_assets_by_id = (
         await _get_midi_assets_by_ids(
             session,
@@ -517,13 +538,14 @@ async def get_lyrics_version(
 async def get_latest_lyrics_version(
     session: AsyncSession,
     project_id: UUID,
+    song_spec_id: UUID | None = None,
 ) -> LyricsVersion | None:
-    statement: Select[tuple[LyricsVersion]] = (
-        select(LyricsVersion)
-        .where(LyricsVersion.project_id == str(project_id))
-        .order_by(LyricsVersion.version_number.desc())
-        .limit(1)
+    statement: Select[tuple[LyricsVersion]] = select(LyricsVersion).where(
+        LyricsVersion.project_id == str(project_id)
     )
+    if song_spec_id is not None:
+        statement = statement.where(LyricsVersion.song_spec_id == str(song_spec_id))
+    statement = statement.order_by(LyricsVersion.version_number.desc()).limit(1)
     result = await session.execute(statement)
     return result.scalar_one_or_none()
 
@@ -544,13 +566,14 @@ async def get_chord_progression_version(
 async def get_latest_chord_progression_version(
     session: AsyncSession,
     project_id: UUID,
+    song_spec_id: UUID | None = None,
 ) -> ChordProgressionVersion | None:
-    statement: Select[tuple[ChordProgressionVersion]] = (
-        select(ChordProgressionVersion)
-        .where(ChordProgressionVersion.project_id == str(project_id))
-        .order_by(ChordProgressionVersion.version_number.desc())
-        .limit(1)
-    )
+    statement: Select[tuple[ChordProgressionVersion]] = select(
+        ChordProgressionVersion
+    ).where(ChordProgressionVersion.project_id == str(project_id))
+    if song_spec_id is not None:
+        statement = statement.where(ChordProgressionVersion.song_spec_id == str(song_spec_id))
+    statement = statement.order_by(ChordProgressionVersion.version_number.desc()).limit(1)
     result = await session.execute(statement)
     return result.scalar_one_or_none()
 
@@ -571,8 +594,11 @@ async def get_midi_asset_version(
 async def get_latest_midi_assets_by_kind(
     session: AsyncSession,
     project_id: UUID,
+    song_spec_id: UUID | None = None,
 ) -> dict[MidiAssetKind, MidiAssetVersion]:
     assets = await _list_midi_assets(session, project_id)
+    if song_spec_id is not None:
+        assets = [asset for asset in assets if asset.song_spec_id == str(song_spec_id)]
     return _latest_midi_by_kind(assets)
 
 
@@ -645,24 +671,39 @@ async def _resolve_export_assets(
     project_id: UUID,
     arrangement_plan_id: UUID | None,
 ) -> tuple[ExportAssets | None, list[str], str | None]:
+    song_specs = await _list_song_specs(session, project_id)
+    song_spec = next(
+        (version for version in song_specs if version.status == SongSpecStatus.approved),
+        None,
+    )
+    approved_id = UUID(song_spec.id) if song_spec else None
     arrangement = (
         await get_arrangement_plan_version(session, project_id, arrangement_plan_id)
         if arrangement_plan_id
-        else await get_latest_arrangement_plan_version(session, project_id)
+        else (
+            await get_latest_arrangement_plan_version(session, project_id, approved_id)
+            if approved_id
+            else None
+        )
     )
     if arrangement_plan_id and arrangement is None:
         return None, [], "ArrangementPlanVersion not found"
     if arrangement is None:
         return None, ["arrangement"], None
 
-    song_specs = await _list_song_specs(session, project_id)
-    song_spec = next(
-        (version for version in song_specs if version.status == SongSpecStatus.approved),
-        None,
+    lyrics = (
+        await get_latest_lyrics_version(session, project_id, approved_id) if approved_id else None
     )
-    lyrics = await get_latest_lyrics_version(session, project_id)
-    chords = await get_latest_chord_progression_version(session, project_id)
-    midi_by_kind = await get_latest_midi_assets_by_kind(session, project_id)
+    chords = (
+        await get_latest_chord_progression_version(session, project_id, approved_id)
+        if approved_id
+        else None
+    )
+    midi_by_kind = (
+        await get_latest_midi_assets_by_kind(session, project_id, approved_id)
+        if approved_id
+        else {}
+    )
     arrangement_midi_assets_by_id = await _get_midi_assets_by_ids(
         session,
         project_id,

@@ -30,6 +30,7 @@ from abachiwave.services.projects import (
 )
 from abachiwave.services.review import build_project_review
 from abachiwave.services.song_specs import (
+    SongSpecStructureChangeRequiresPreviewError,
     approve_song_spec_version,
     create_idea_intake,
     edit_song_spec_version,
@@ -200,7 +201,15 @@ async def edit_song_spec_version_endpoint(
     payload: SongSpecUpdate,
     session: SessionDependency,
 ) -> SongSpecVersionRead:
-    song_spec = await edit_song_spec_version(session, project_id, song_spec_id, payload)
+    try:
+        song_spec = await edit_song_spec_version(session, project_id, song_spec_id, payload)
+    except SongSpecStructureChangeRequiresPreviewError as error:
+        raise ProblemError(
+            status_code=status.HTTP_409_CONFLICT,
+            error_code=ErrorCode.SONG_STRUCTURE_CHANGE_REQUIRES_PREVIEW,
+            detail=str(error),
+            hint=ErrorHint.USE_STRUCTURE_EDITOR,
+        ) from error
     if song_spec is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SongSpec not found")
     return song_spec_to_read(song_spec)

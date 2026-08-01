@@ -46,6 +46,7 @@ class ErrorCode(StrEnum):
     CHORD_THEORY_ERROR = "chord_theory_error"
     SONG_SPEC_INCOMPLETE = "song_spec_incomplete"
     INTERNAL_ERROR = "internal_error"
+    SONG_STRUCTURE_CHANGE_REQUIRES_PREVIEW = "song_structure_change_requires_preview"
 
 
 class ErrorHint(StrEnum):
@@ -59,6 +60,7 @@ class ErrorHint(StrEnum):
     CHECK_REQUIRED_FIELDS = "check_required_fields"
     CHECK_CHORD_SYMBOL = "check_chord_symbol"
     CONTACT_SUPPORT = "contact_support"
+    USE_STRUCTURE_EDITOR = "use_structure_editor"
 
 
 @dataclass

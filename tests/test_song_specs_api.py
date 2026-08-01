@@ -126,3 +126,53 @@ async def test_song_spec_not_found_returns_404(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_structure_edit_requires_preview_after_first_approval(client: AsyncClient) -> None:
+    project_id = await _create_project(client)
+    intake = await client.post(
+        f"/api/v1/projects/{project_id}/intake",
+        json={
+            "idea": (
+                "English indie rock song about the night train. Verse quiet, chorus hopeful. "
+                "120 BPM, C major, 4/4, 3:00, standard structure."
+            )
+        },
+    )
+    generated = await client.post(
+        f"/api/v1/projects/{project_id}/song-spec/generate",
+        json={"intake_id": intake.json()["intake_id"]},
+    )
+    first = generated.json()
+    initial_edit = await client.patch(
+        f"/api/v1/projects/{project_id}/song-specs/{first['id']}",
+        json={"song_structure": ["Intro", "Verse", "Chorus"]},
+    )
+    assert initial_edit.status_code == 200
+    initial_draft = initial_edit.json()
+    initial_sections = initial_draft["song_spec"]["structure_sections"]
+    assert [section["label"] for section in initial_sections] == ["Intro", "Verse", "Chorus"]
+    assert (
+        await client.post(
+            f"/api/v1/projects/{project_id}/song-specs/{initial_draft['id']}/approve"
+        )
+    ).status_code == 200
+
+    unchanged = await client.patch(
+        f"/api/v1/projects/{project_id}/song-specs/{initial_draft['id']}",
+        json={
+            "tempo_bpm": 124,
+            "song_structure": ["Intro", "Verse", "Chorus"],
+        },
+    )
+    assert unchanged.status_code == 200
+    assert unchanged.json()["song_spec"]["structure_sections"] == initial_sections
+
+    changed = await client.patch(
+        f"/api/v1/projects/{project_id}/song-specs/{unchanged.json()['id']}",
+        json={"song_structure": ["Intro", "Verse", "Bridge", "Chorus"]},
+    )
+    assert changed.status_code == 409
+    assert changed.headers["X-Error-Code"] == "song_structure_change_requires_preview"
+    assert changed.headers["X-Error-Hint"] == "use_structure_editor"

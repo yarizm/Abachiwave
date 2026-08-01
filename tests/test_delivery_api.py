@@ -132,12 +132,9 @@ async def test_arrangement_requires_complete_asset_chain(
 
 
 @pytest.mark.asyncio
-async def test_reapproving_song_spec_rebinds_asset_chain(
+async def test_approving_new_song_spec_preserves_provenance_and_stales_assets(
     client_with_storage: tuple[AsyncClient, MemoryStorage],
 ) -> None:
-    """Editing and re-approving a SongSpec creates a new spec id; the existing
-    asset chain must be rebound to it (metadata-only) so arrangement and
-    export keep working instead of returning 409 prerequisites_missing."""
     client, _storage = client_with_storage
     project_id, song_spec, _lyrics, _chords, _midi_assets = await _create_full_asset_chain(
         client
@@ -162,25 +159,52 @@ async def test_reapproving_song_spec_rebinds_asset_chain(
     assert approve_response.status_code == 200
 
     lyrics_after = (await client.get(f"/api/v1/projects/{project_id}/lyrics")).json()
-    assert lyrics_after[0]["song_spec_id"] == new_spec_id
+    assert lyrics_after[0]["song_spec_id"] == old_spec_id
     chords_after = (await client.get(f"/api/v1/projects/{project_id}/chords")).json()
-    assert chords_after[0]["song_spec_id"] == new_spec_id
+    assert chords_after[0]["song_spec_id"] == old_spec_id
     midi_after = (await client.get(f"/api/v1/projects/{project_id}/midi-assets")).json()
-    assert {asset["song_spec_id"] for asset in midi_after} == {new_spec_id}
+    assert {asset["song_spec_id"] for asset in midi_after} == {old_spec_id}
     arrangements_after = (
         await client.get(f"/api/v1/projects/{project_id}/arrangements")
     ).json()
-    assert arrangements_after[0]["song_spec_id"] == new_spec_id
+    assert arrangements_after[0]["song_spec_id"] == old_spec_id
+
+    stale_tree = (await client.get(f"/api/v1/projects/{project_id}/assets")).json()
+    assert stale_tree["current"] == {
+        "song_spec": stale_tree["current"]["song_spec"],
+        "lyrics": None,
+        "chords": None,
+        "midi_assets": [],
+        "arrangement": None,
+    }
+    assert stale_tree["current"]["song_spec"]["id"] == new_spec_id
+    assert set(stale_tree["missing_prerequisites"]) == {
+        "lyrics",
+        "chords",
+        "midi_chord",
+        "midi_melody",
+        "midi_hook",
+        "arrangement",
+    }
 
     export_response = await client.post(
         f"/api/v1/projects/{project_id}/exports",
         json={},
     )
-    assert export_response.status_code == 201
+    assert export_response.status_code == 409
 
     specs = (await client.get(f"/api/v1/projects/{project_id}/song-specs")).json()
     old_spec = next(item for item in specs if item["id"] == old_spec_id)
     assert old_spec["status"] == "superseded"
+
+    restore_response = await client.post(
+        f"/api/v1/projects/{project_id}/song-specs/{old_spec_id}/approve"
+    )
+    assert restore_response.status_code == 200
+    restored_tree = (await client.get(f"/api/v1/projects/{project_id}/assets")).json()
+    assert restored_tree["missing_prerequisites"] == []
+    assert restored_tree["current"]["lyrics"]["id"] == lyrics_after[0]["id"]
+    assert (await client.post(f"/api/v1/projects/{project_id}/exports", json={})).status_code == 201
 
 
 @pytest.mark.asyncio

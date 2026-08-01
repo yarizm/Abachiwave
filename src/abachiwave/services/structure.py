@@ -94,7 +94,7 @@ async def change_project_structure(
         await lock_project_for_version_write(session, project_id)
     await _require_current_approved_song_spec(session, project_id, source)
     _validate_section_sources(source, payload.sections)
-    assets = await _load_current_assets(session, project_id)
+    assets = await _load_current_assets(session, project_id, UUID(source.id))
     impact = _build_impact(source, payload.sections, assets)
     if not _has_structure_changes(impact):
         raise StructureConflictError("The proposed structure does not contain any changes")
@@ -181,11 +181,14 @@ async def _require_current_approved_song_spec(
 async def _load_current_assets(
     session: AsyncSession,
     project_id: UUID,
+    song_spec_id: UUID,
 ) -> CurrentStructureAssets:
-    lyrics = await get_latest_lyrics_version(session, project_id)
-    chords = await get_latest_chord_progression_version(session, project_id)
-    arrangement = await get_latest_arrangement_plan_version(session, project_id)
-    midi_assets = list((await get_latest_midi_assets_by_kind(session, project_id)).values())
+    lyrics = await get_latest_lyrics_version(session, project_id, song_spec_id)
+    chords = await get_latest_chord_progression_version(session, project_id, song_spec_id)
+    arrangement = await get_latest_arrangement_plan_version(session, project_id, song_spec_id)
+    midi_assets = list(
+        (await get_latest_midi_assets_by_kind(session, project_id, song_spec_id)).values()
+    )
     demo_statement: Select[tuple[AudioDemoVersion]] = (
         select(AudioDemoVersion)
         .where(AudioDemoVersion.project_id == str(project_id))
