@@ -106,6 +106,9 @@ export const zhCN = {
   "Loading status": "正在加载状态",
   "Idea intake": "灵感输入",
   "AI candidates": "AI 候选",
+  "AI provider list could not be loaded.": "无法加载 AI 提供方列表。",
+  "AI candidate list could not be loaded.": "无法加载 AI 候选列表。",
+  "Retry AI data": "重新加载 AI 数据",
   Workflow: "工作流",
   Provider: "提供方",
   Candidates: "候选数量",
@@ -139,6 +142,7 @@ export const zhCN = {
   "Duration seconds": "目标时长（秒）",
   "Mood curve JSON": "情绪曲线 JSON",
   "Song structure, one section per line": "歌曲结构（每行一个段落）",
+  "Edit in Song Structure": "在歌曲结构编辑器中修改",
   "Missing: {items}": "缺少：{items}",
   "Save new version": "保存新版本",
   Approve: "确认",
@@ -831,6 +835,7 @@ const ERROR_CODE_EN: Record<string, string> = {
   chord_theory_error: "Invalid chord input",
   song_spec_incomplete: "SongSpec has missing fields",
   internal_error: "Unexpected server error",
+  song_structure_change_requires_preview: "Song structure changes require an impact preview",
 };
 
 const ERROR_CODE_ZH: Record<string, string> = {
@@ -844,6 +849,7 @@ const ERROR_CODE_ZH: Record<string, string> = {
   chord_theory_error: "和弦输入无效",
   song_spec_incomplete: "SongSpec 字段不全",
   internal_error: "服务器内部错误",
+  song_structure_change_requires_preview: "歌曲结构变更需要先预览影响范围",
 };
 
 const HINT_EN: Record<string, string> = {
@@ -855,6 +861,7 @@ const HINT_EN: Record<string, string> = {
   check_required_fields: "Fill in required fields",
   check_chord_symbol: "Check chord symbol or timing",
   contact_support: "Contact support",
+  use_structure_editor: "Open Song Structure editor",
 };
 
 const HINT_ZH: Record<string, string> = {
@@ -866,6 +873,7 @@ const HINT_ZH: Record<string, string> = {
   check_required_fields: "填写必填字段",
   check_chord_symbol: "检查和弦符号或节拍",
   contact_support: "联系支持",
+  use_structure_editor: "打开歌曲结构编辑器",
 };
 
 export function errorCodeMessage(

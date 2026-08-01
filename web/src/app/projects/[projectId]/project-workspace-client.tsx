@@ -215,6 +215,7 @@ export default function ProjectWorkspaceClient() {
     setAudioUploads,
     providerProfiles,
     candidates,
+    optionalErrors,
     isLoading,
     error,
     setError,
@@ -278,6 +279,10 @@ export default function ProjectWorkspaceClient() {
   const canExportProject = canCreateExport(assetTree);
   const hasActiveDemoRun = demoRuns.some(isRunActive);
   const canGenerateDemoVersion = canGenerateDemo(assetTree) && !hasActiveDemoRun;
+  const aiLoadErrors = [
+    optionalErrors.providers ? t("AI provider list could not be loaded.") : null,
+    optionalErrors.candidates ? t("AI candidate list could not be loaded.") : null,
+  ].filter((message): message is string => message !== null);
   const compositionGuardReason = canGenerateAssets ? null : t("Approve a SongSpec to enable generation");
   const arrangementGuardReason = canGenerateArrangementPlan ? null : t("Complete lyrics, chords, and MIDI to enable arrangement");
   const demoGuardReason = !canGenerateDemo(assetTree)
@@ -317,7 +322,9 @@ export default function ProjectWorkspaceClient() {
     const form = active?.closest("form") as HTMLFormElement | null;
     if (form && hotkeySubmitAllowed(form)) {
       form.requestSubmit();
+      return true;
     }
+    return false;
   });
   // Cmd/Ctrl+S saves the editor form currently holding focus (overrides
   // the browser save dialog only while focused inside a workspace form).
@@ -326,7 +333,9 @@ export default function ProjectWorkspaceClient() {
     const form = active?.closest("form") as HTMLFormElement | null;
     if (form && hotkeySubmitAllowed(form)) {
       form.requestSubmit();
+      return true;
     }
+    return false;
   });
   const commentTargets = useMemo(
     () =>
@@ -488,7 +497,7 @@ export default function ProjectWorkspaceClient() {
     if (!activeVersion) {
       return;
     }
-    const payload = parseDraftForm(draftForm);
+    const payload = parseDraftForm(draftForm, !approvedVersion);
     if (payload instanceof Error) {
       setError(text(payload.message));
       return;
@@ -1337,15 +1346,18 @@ export default function ProjectWorkspaceClient() {
         onIntakeSubmit={handleIntakeSubmit}
         onSongSpecSubmit={handleSongSpecSubmit}
         state={state}
+        structureLocked={Boolean(approvedVersion)}
       />
       </div>
 
+      <div id="song-structure-panel" className="workspace-anchor" tabIndex={-1}>
       <StructureWorkspace
         isSaving={pendingActions.isPending("structure")}
         onChange={handleStructureChange}
         projectId={projectId}
         sourceVersion={approvedVersion}
       />
+      </div>
 
       <CandidateWorkspace
         approvedSongSpecId={approvedVersion?.id ?? null}
@@ -1353,8 +1365,10 @@ export default function ProjectWorkspaceClient() {
         candidates={candidates}
         isSaving={pendingActions.isPending("ai", "tasks")}
         latestIntakeId={latestIntake?.intake_id ?? null}
+        loadErrors={aiLoadErrors}
         onCancel={handleCancelRun}
         onGenerate={handleGenerateCandidates}
+        onRetry={loadWorkspace}
         onSelect={handleSelectCandidate}
         providers={providerProfiles}
         runs={textRuns}
@@ -1501,9 +1515,16 @@ function draftFormFromSongSpec(songSpec: SongSpec): SongSpecDraftForm {
   };
 }
 
-function parseDraftForm(form: SongSpecDraftForm): SongSpec | Error {
+type SongSpecUpdatePayload = Omit<SongSpec, "song_structure" | "structure_sections"> & {
+  song_structure?: string[] | null;
+};
+
+function parseDraftForm(
+  form: SongSpecDraftForm,
+  includeStructure: boolean,
+): SongSpecUpdatePayload | Error {
   try {
-    return {
+    const payload: SongSpecUpdatePayload = {
       theme: form.theme.trim() || null,
       genre: splitList(form.genre),
       language: form.language.trim() || null,
@@ -1512,8 +1533,11 @@ function parseDraftForm(form: SongSpecDraftForm): SongSpec | Error {
       time_signature: form.time_signature.trim() || null,
       target_duration_seconds: parseOptionalNumber(form.target_duration_seconds),
       mood_curve: form.mood_curve.trim() ? JSON.parse(form.mood_curve) : null,
-      song_structure: splitLines(form.song_structure),
     };
+    if (includeStructure) {
+      payload.song_structure = splitLines(form.song_structure);
+    }
+    return payload;
   } catch {
     return new Error("Mood curve must be valid JSON.");
   }

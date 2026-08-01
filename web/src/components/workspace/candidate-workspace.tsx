@@ -19,6 +19,7 @@ type CandidateWorkspaceProps = {
   candidates: GenerationCandidate[];
   isSaving: boolean;
   latestIntakeId: string | null;
+  loadErrors: string[];
   onCancel: (runId: string) => void;
   onGenerate: (input: {
     workflow: TextWorkflow;
@@ -26,6 +27,7 @@ type CandidateWorkspaceProps = {
     candidateCount: number;
     feedback: string;
   }) => void;
+  onRetry: () => void;
   onSelect: (candidateId: string) => void;
   providers: ProviderCapability[];
   runs: GenerationRun[];
@@ -39,8 +41,10 @@ export function CandidateWorkspace({
   candidates,
   isSaving,
   latestIntakeId,
+  loadErrors,
   onCancel,
   onGenerate,
+  onRetry,
   onSelect,
   providers,
   runs,
@@ -96,6 +100,18 @@ export function CandidateWorkspace({
         </div>
         {activeRuns.length ? <span className="badge">{text(activeRuns[0].status)}</span> : null}
       </div>
+
+      {loadErrors.length ? (
+        <div className="error-hint">
+          {loadErrors.map((message) => (
+            <p className="error" key={message}>{message}</p>
+          ))}
+          <button className="button secondary" onClick={onRetry} type="button">
+            <RotateCcw aria-hidden="true" size={18} />
+            {t("Retry AI data")}
+          </button>
+        </div>
+      ) : null}
 
       <div className="candidate-controls">
         <div className="field">

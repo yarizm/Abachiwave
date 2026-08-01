@@ -47,6 +47,10 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
   const [audioUploads, setAudioUploads] = useState<AudioUpload[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<ProviderCapability[]>([]);
   const [candidates, setCandidates] = useState<GenerationCandidate[]>([]);
+  const [optionalErrors, setOptionalErrors] = useState({
+    providers: null as string | null,
+    candidates: null as string | null,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +78,7 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setAudioUploads(snapshot.audioUploads);
       setProviderProfiles(snapshot.providerProfiles);
       setCandidates(snapshot.candidates);
+      setOptionalErrors(snapshot.optionalErrors);
     } catch (loadError) {
       setError(errorMessage(loadError, "Failed to load workspace"));
     } finally {
@@ -138,6 +143,7 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
     setProviderProfiles,
     candidates,
     setCandidates,
+    optionalErrors,
     isLoading,
     error,
     setError,

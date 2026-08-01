@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-type HotkeyHandler = (event: KeyboardEvent) => void;
+type HotkeyHandler = (event: KeyboardEvent) => boolean;
 
 type UseHotkeyOptions = {
   /** The key to match (e.g. "Enter", "s", "Escape"). Case-insensitive. */
@@ -17,8 +17,21 @@ type UseHotkeyOptions = {
   preventDefault?: boolean;
 };
 
-function isModifierPressed(event: KeyboardEvent): boolean {
-  return event.metaKey || event.ctrlKey;
+export function matchesHotkey(
+  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">,
+  options: Pick<UseHotkeyOptions, "key" | "mod" | "disabled">,
+): boolean {
+  if (options.disabled || event.key.toLowerCase() !== options.key.toLowerCase()) {
+    return false;
+  }
+  return !options.mod || event.metaKey || event.ctrlKey;
+}
+
+export function shouldPreventHotkeyDefault(
+  handled: boolean,
+  preventDefault = true,
+): boolean {
+  return handled && preventDefault;
 }
 
 function isInputElement(target: EventTarget | null): boolean {
@@ -44,10 +57,7 @@ export function useHotkey(options: UseHotkeyOptions, handler: HotkeyHandler) {
     const expectedKey = key.toLowerCase();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() !== expectedKey) {
-        return;
-      }
-      if (mod && !isModifierPressed(event)) {
+      if (!matchesHotkey(event, { key: expectedKey, mod, disabled })) {
         return;
       }
       if (target) {
@@ -60,10 +70,10 @@ export function useHotkey(options: UseHotkeyOptions, handler: HotkeyHandler) {
       if (!mod && isInputElement(event.target)) {
         return;
       }
-      if (preventDefault) {
+      const handled = handler(event);
+      if (shouldPreventHotkeyDefault(handled, preventDefault)) {
         event.preventDefault();
       }
-      handler(event);
     }
 
     document.addEventListener("keydown", onKeyDown);

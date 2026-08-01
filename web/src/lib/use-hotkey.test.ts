@@ -1,50 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-/**
- * useHotkey is a DOM-effect hook; Node's test runner has no DOM. We exercise the
- * pure matching logic extracted below to avoid pulling in a jsdom dependency.
- * The hook itself is a thin wrapper over document.addEventListener.
- */
+import { matchesHotkey, shouldPreventHotkeyDefault } from "./use-hotkey";
 
-type MatchResult = { match: boolean; preventDefault: boolean };
-
-function matchHotkey(
-  eventKey: string,
-  eventMeta: boolean,
-  options: { key: string; mod: boolean; disabled: boolean },
-): MatchResult {
-  if (options.disabled) {
-    return { match: false, preventDefault: false };
-  }
-  if (eventKey.toLowerCase() !== options.key.toLowerCase()) {
-    return { match: false, preventDefault: false };
-  }
-  if (options.mod && !(eventMeta)) {
-    return { match: false, preventDefault: false };
-  }
-  return { match: true, preventDefault: true };
+function event(key: string, mod = false) {
+  return { key, metaKey: mod, ctrlKey: false };
 }
 
 test("useHotkey matching: plain key matches without modifier", () => {
-  const result = matchHotkey("s", false, { key: "s", mod: false, disabled: false });
-  assert.equal(result.match, true);
+  assert.equal(matchesHotkey(event("s"), { key: "s", mod: false, disabled: false }), true);
 });
 
 test("useHotkey matching: mod key requires meta/ctrl", () => {
-  assert.equal(matchHotkey("Enter", false, { key: "Enter", mod: true, disabled: false }).match, false);
-  assert.equal(matchHotkey("Enter", true, { key: "Enter", mod: true, disabled: false }).match, true);
+  assert.equal(matchesHotkey(event("Enter"), { key: "Enter", mod: true, disabled: false }), false);
+  assert.equal(matchesHotkey(event("Enter", true), { key: "Enter", mod: true, disabled: false }), true);
 });
 
 test("useHotkey matching: key is case-insensitive", () => {
-  assert.equal(matchHotkey("S", false, { key: "s", mod: false, disabled: false }).match, true);
-  assert.equal(matchHotkey("s", false, { key: "S", mod: false, disabled: false }).match, true);
+  assert.equal(matchesHotkey(event("S"), { key: "s", mod: false, disabled: false }), true);
+  assert.equal(matchesHotkey(event("s"), { key: "S", mod: false, disabled: false }), true);
 });
 
 test("useHotkey matching: disabled never matches", () => {
-  assert.equal(matchHotkey("s", false, { key: "s", mod: false, disabled: true }).match, false);
+  assert.equal(matchesHotkey(event("s"), { key: "s", mod: false, disabled: true }), false);
 });
 
 test("useHotkey matching: unrelated key does not match", () => {
-  assert.equal(matchHotkey("a", false, { key: "s", mod: false, disabled: false }).match, false);
+  assert.equal(matchesHotkey(event("a"), { key: "s", mod: false, disabled: false }), false);
+});
+
+test("useHotkey prevents browser defaults only when the handler handled the shortcut", () => {
+  assert.equal(shouldPreventHotkeyDefault(true), true);
+  assert.equal(shouldPreventHotkeyDefault(false), false);
+  assert.equal(shouldPreventHotkeyDefault(true, false), false);
 });

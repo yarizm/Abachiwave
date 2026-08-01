@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FilePlus2, Save } from "lucide-react";
+import { Check, FilePlus2, ListMusic, Save } from "lucide-react";
 import { FormEvent } from "react";
 
 import { useLocale } from "@/i18n/locale-provider";
@@ -33,6 +33,7 @@ type SongSpecWorkspaceProps = {
   onIntakeSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSongSpecSubmit: (event: FormEvent<HTMLFormElement>) => void;
   state: string;
+  structureLocked: boolean;
 };
 
 export function SongSpecWorkspace({
@@ -50,6 +51,7 @@ export function SongSpecWorkspace({
   onIntakeSubmit,
   onSongSpecSubmit,
   state,
+  structureLocked,
 }: SongSpecWorkspaceProps) {
   const { t, text } = useLocale();
   return (
@@ -118,6 +120,7 @@ export function SongSpecWorkspace({
             onApprove={onApprove}
             onChange={onDraftChange}
             onSubmit={onSongSpecSubmit}
+            structureLocked={structureLocked}
           />
         ) : (
           <div className="empty">{t("No SongSpec draft yet. Save an intake, then generate a draft.")}</div>
@@ -164,6 +167,7 @@ function SongSpecEditor({
   onApprove,
   onChange,
   onSubmit,
+  structureLocked,
 }: {
   activeVersion: SongSpecVersion;
   draftForm: SongSpecDraftForm;
@@ -171,6 +175,7 @@ function SongSpecEditor({
   onApprove: () => void;
   onChange: (next: SongSpecDraftForm) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  structureLocked: boolean;
 }) {
   const { t, text } = useLocale();
   const complete = isSongSpecComplete(activeVersion.song_spec);
@@ -194,13 +199,24 @@ function SongSpecEditor({
         state={draftForm}
       />
       <TextAreaField id="mood_curve" label={t("Mood curve JSON")} name="mood_curve" onChange={onChange} state={draftForm} />
-      <TextAreaField
-        id="song_structure"
-        label={t("Song structure, one section per line")}
-        name="song_structure"
-        onChange={onChange}
-        state={draftForm}
-      />
+      {structureLocked ? (
+        <div className="field">
+          <label htmlFor="song_structure_summary">{t("Song structure")}</label>
+          <textarea id="song_structure_summary" readOnly value={draftForm.song_structure} />
+          <a className="button secondary" href="#song-structure-panel">
+            <ListMusic aria-hidden="true" size={18} />
+            {t("Edit in Song Structure")}
+          </a>
+        </div>
+      ) : (
+        <TextAreaField
+          id="song_structure"
+          label={t("Song structure, one section per line")}
+          name="song_structure"
+          onChange={onChange}
+          state={draftForm}
+        />
+      )}
       {activeVersion.missing_required_fields.length ? (
         <p className="meta">
           {t("Missing: {items}", {

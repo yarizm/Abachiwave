@@ -76,13 +76,48 @@ export type WorkspaceSnapshot = {
   audioUploads: AudioUpload[];
   providerProfiles: ProviderCapability[];
   candidates: GenerationCandidate[];
+  optionalErrors: {
+    providers: string | null;
+    candidates: string | null;
+  };
 };
+
+type OptionalWorkspaceData = Pick<
+  WorkspaceSnapshot,
+  "providerProfiles" | "candidates" | "optionalErrors"
+>;
 
 export async function loadWorkspaceSnapshot(
   apiBaseUrl: string,
   projectId: string,
 ): Promise<WorkspaceSnapshot> {
-  const [
+  const corePromise = Promise.all([
+    fetchJson<Project>(projectDetailEndpoint(apiBaseUrl, projectId), "Project"),
+    fetchJson<IdeaIntake | null>(latestIntakeEndpoint(apiBaseUrl, projectId), "Latest intake"),
+    fetchJson<SongSpecVersion[]>(songSpecsEndpoint(apiBaseUrl, projectId), "SongSpec list"),
+    fetchJson<LyricsVersion[]>(lyricsEndpoint(apiBaseUrl, projectId), "Lyrics list"),
+    fetchJson<ChordProgressionVersion[]>(chordsEndpoint(apiBaseUrl, projectId), "Chords list"),
+    fetchJson<MidiAssetVersion[]>(midiAssetsEndpoint(apiBaseUrl, projectId), "MIDI asset list"),
+    fetchJson<ArrangementPlanVersion[]>(
+      arrangementsEndpoint(apiBaseUrl, projectId),
+      "Arrangement list",
+    ),
+    fetchJson<AssetTree>(assetTreeEndpoint(apiBaseUrl, projectId), "Asset tree"),
+    fetchJson<ExportBundle[]>(exportsEndpoint(apiBaseUrl, projectId), "Export list"),
+    fetchJson<AudioDemoVersion[]>(demosEndpoint(apiBaseUrl, projectId), "Demo list"),
+    fetchJson<GenerationRun[]>(projectRunsEndpoint(apiBaseUrl, projectId), "Generation run list"),
+    fetchJson<RevisionRequest[]>(revisionsEndpoint(apiBaseUrl, projectId), "Revision list"),
+    fetchJson<ProjectComment[]>(projectCommentsEndpoint(apiBaseUrl, projectId), "Comment list"),
+    fetchJson<ProjectEvent[]>(projectEventsEndpoint(apiBaseUrl, projectId), "Project event list"),
+    fetchJson<ProjectHandoff>(projectHandoffEndpoint(apiBaseUrl, projectId), "Project handoff"),
+    fetchJson<ProjectReview>(projectReviewEndpoint(apiBaseUrl, projectId), "Project review"),
+    fetchJson<AudioUpload[]>(audioUploadsEndpoint(apiBaseUrl, projectId), "Audio upload list"),
+  ]);
+  const optionalPromise = loadOptionalWorkspaceData(
+    fetchJson<ProviderCapability[]>(providerCapabilitiesEndpoint(apiBaseUrl), "Provider list"),
+    fetchJson<GenerationCandidate[]>(candidatesEndpoint(apiBaseUrl, projectId), "Candidate list"),
+  );
+  const [[
     project,
     latestIntake,
     versions,
@@ -100,38 +135,7 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads,
-    providerProfiles,
-    candidates,
-  ] = await Promise.all([
-    fetchJson<Project>(projectDetailEndpoint(apiBaseUrl, projectId), "Project"),
-    fetchJson<IdeaIntake | null>(latestIntakeEndpoint(apiBaseUrl, projectId), "Latest intake"),
-    fetchJson<SongSpecVersion[]>(songSpecsEndpoint(apiBaseUrl, projectId), "SongSpec list"),
-    fetchJson<LyricsVersion[]>(lyricsEndpoint(apiBaseUrl, projectId), "Lyrics list"),
-    fetchJson<ChordProgressionVersion[]>(chordsEndpoint(apiBaseUrl, projectId), "Chords list"),
-    fetchJson<MidiAssetVersion[]>(midiAssetsEndpoint(apiBaseUrl, projectId), "MIDI asset list"),
-    fetchJson<ArrangementPlanVersion[]>(
-      arrangementsEndpoint(apiBaseUrl, projectId),
-      "Arrangement list",
-    ),
-    fetchJson<AssetTree>(assetTreeEndpoint(apiBaseUrl, projectId), "Asset tree"),
-    fetchJson<ExportBundle[]>(exportsEndpoint(apiBaseUrl, projectId), "Export list"),
-    fetchJson<AudioDemoVersion[]>(demosEndpoint(apiBaseUrl, projectId), "Demo list"),
-    fetchJson<GenerationRun[]>(
-      projectRunsEndpoint(apiBaseUrl, projectId),
-      "Generation run list",
-    ),
-    fetchJson<RevisionRequest[]>(revisionsEndpoint(apiBaseUrl, projectId), "Revision list"),
-    fetchJson<ProjectComment[]>(
-      projectCommentsEndpoint(apiBaseUrl, projectId),
-      "Comment list",
-    ),
-    fetchJson<ProjectEvent[]>(projectEventsEndpoint(apiBaseUrl, projectId), "Project event list"),
-    fetchJson<ProjectHandoff>(projectHandoffEndpoint(apiBaseUrl, projectId), "Project handoff"),
-    fetchJson<ProjectReview>(projectReviewEndpoint(apiBaseUrl, projectId), "Project review"),
-    fetchJson<AudioUpload[]>(audioUploadsEndpoint(apiBaseUrl, projectId), "Audio upload list"),
-    fetchJson<ProviderCapability[]>(providerCapabilitiesEndpoint(apiBaseUrl), "Provider list"),
-    fetchJson<GenerationCandidate[]>(candidatesEndpoint(apiBaseUrl, projectId), "Candidate list"),
-  ]);
+  ], optional] = await Promise.all([corePromise, optionalPromise]);
 
   return {
     project,
@@ -151,7 +155,32 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads: sortAudioUploads(audioUploads),
-    providerProfiles,
-    candidates: sortGenerationCandidates(candidates),
+    providerProfiles: optional.providerProfiles,
+    candidates: optional.candidates,
+    optionalErrors: optional.optionalErrors,
   };
+}
+
+export async function loadOptionalWorkspaceData(
+  providersPromise: Promise<ProviderCapability[]>,
+  candidatesPromise: Promise<GenerationCandidate[]>,
+): Promise<OptionalWorkspaceData> {
+  const [providers, candidates] = await Promise.allSettled([
+    providersPromise,
+    candidatesPromise,
+  ]);
+  return {
+    providerProfiles: providers.status === "fulfilled" ? providers.value : [],
+    candidates:
+      candidates.status === "fulfilled" ? sortGenerationCandidates(candidates.value) : [],
+    optionalErrors: {
+      providers: providers.status === "rejected" ? optionalErrorMessage(providers.reason) : null,
+      candidates:
+        candidates.status === "rejected" ? optionalErrorMessage(candidates.reason) : null,
+    },
+  };
+}
+
+function optionalErrorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : "Optional workspace data is unavailable";
 }
