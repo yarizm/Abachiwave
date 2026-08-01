@@ -24,6 +24,9 @@ dependencies = [
     "uvicorn[standard]>=0.30.6",
 ]
 
+[project.scripts]
+abachiwave-audit-provenance = "abachiwave.provenance_audit_cli:main"
+
 [dependency-groups]
 dev = [
     "aiosqlite>=0.20.0",
