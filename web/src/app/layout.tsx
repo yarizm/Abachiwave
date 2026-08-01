@@ -47,7 +47,7 @@ export default async function RootLayout({
   const locale = isLocale(requestedLocale) ? requestedLocale : DEFAULT_LOCALE;
   const theme = resolveInitialTheme(cookieStore.get(THEME_COOKIE)?.value);
   return (
-    <html lang={locale} data-theme={theme}>
+    <html lang={locale} data-theme={theme} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <ThemeProvider initialTheme={theme}>

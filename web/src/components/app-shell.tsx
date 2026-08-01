@@ -10,8 +10,7 @@ import { Locale } from "@/i18n/translations";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { locale, setLocale, t } = useLocale();
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { toggleTheme } = useTheme();
   return (
     <div className="shell">
       <header className="topbar">
@@ -43,7 +42,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             title={t("Toggle theme")}
             type="button"
           >
-            {isDark ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}
+            <span aria-hidden="true" className="theme-toggle-icons">
+              <Sun className="theme-toggle-sun" size={18} />
+              <Moon className="theme-toggle-moon" size={18} />
+            </span>
           </button>
         </div>
       </header>
