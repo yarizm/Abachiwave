@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from typing import cast
 from uuid import UUID
@@ -6,14 +7,18 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from abachiwave.models.ai import PromptTemplateVersion, ProviderProfile
 from abachiwave.models.composition import MidiAssetKind, MidiAssetVersion
 from abachiwave.services.ai_generation import (
     REVISION_AVAILABLE_TARGETS,
+    ensure_ai_catalog,
     execute_candidate_generation,
 )
 from abachiwave.services.task_queue import get_text_generation_task_queue
+from abachiwave.services.text_provider import TextGenerationRequest, TextGenerationResult
 
 
 class FakeTextQueue:
@@ -23,6 +28,14 @@ class FakeTextQueue:
     async def enqueue_text_generation(self, run_id: UUID) -> str:
         self.enqueued.append(run_id)
         return f"text-job-{run_id}"
+
+
+class UnexpectedTextProvider:
+    name = "unexpected"
+    version = "1"
+
+    async def generate(self, request: TextGenerationRequest) -> TextGenerationResult:
+        raise AssertionError(f"terminal run called provider for {request.schema_name}")
 
 
 def test_revision_available_targets_match_task_target_enum() -> None:
@@ -123,6 +136,14 @@ async def test_song_spec_candidates_are_not_assets_until_selected(
     assert completed is not None
     assert completed.status == "succeeded"
 
+    replayed = await execute_candidate_generation(
+        UUID(run["id"]),
+        provider=UnexpectedTextProvider(),
+        session_factory=session_factory,
+    )
+    assert replayed is not None
+    assert replayed.status == "succeeded"
+
     candidates_response = await client.get(f"/api/v1/projects/{project_id}/candidates")
     assert candidates_response.status_code == 200
     candidates = candidates_response.json()
@@ -144,6 +165,35 @@ async def test_song_spec_candidates_are_not_assets_until_selected(
         f"/api/v1/projects/{project_id}/candidates/{candidates[1]['id']}/select"
     )
     assert second_selection.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_ai_catalog_initialization_is_idempotent_and_capabilities_get_is_read_only(
+    candidate_client: tuple[AsyncClient, FakeTextQueue],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    client, _queue = candidate_client
+    async with session_factory() as first, session_factory() as second:
+        await asyncio.gather(ensure_ai_catalog(first), ensure_ai_catalog(second))
+
+    async with session_factory() as session:
+        profile_count_before = len(
+            (await session.execute(select(ProviderProfile))).scalars().all()
+        )
+        prompt_count_before = len(
+            (await session.execute(select(PromptTemplateVersion))).scalars().all()
+        )
+    response = await client.get("/api/v1/providers/capabilities")
+    assert response.status_code == 200
+    async with session_factory() as session:
+        assert (
+            len((await session.execute(select(ProviderProfile))).scalars().all())
+            == profile_count_before
+        )
+        assert (
+            len((await session.execute(select(PromptTemplateVersion))).scalars().all())
+            == prompt_count_before
+        )
 
 
 @pytest.mark.asyncio

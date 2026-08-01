@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from abachiwave.core.database import Base, get_session
 from abachiwave.main import create_app
+from abachiwave.services.ai_generation import ensure_ai_catalog
 
 
 @pytest_asyncio.fixture
@@ -21,6 +22,8 @@ async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
         await connection.run_sync(Base.metadata.create_all)
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        await ensure_ai_catalog(session)
     yield factory
     await engine.dispose()
 

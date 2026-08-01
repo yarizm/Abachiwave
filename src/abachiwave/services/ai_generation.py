@@ -1,10 +1,13 @@
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 from sqlalchemy import Select, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.agents.composition import (
@@ -125,23 +128,22 @@ async def ensure_ai_catalog(
             is_default=True,
         )
     else:
-        await _disable_profile_if_present(session, "server-text-provider")
-    for workflow in TextWorkflow:
-        statement: Select[tuple[PromptTemplateVersion]] = select(PromptTemplateVersion).where(
-            PromptTemplateVersion.workflow == workflow,
-            PromptTemplateVersion.version_number == 1,
+        await _upsert_profile(
+            session,
+            profile_key="server-text-provider",
+            provider_name="openai_compatible",
+            display_name="Server text provider",
+            model=selected_settings.text_provider_model,
+            default_params=DEFAULT_PROVIDER_PARAMS,
+            enabled=False,
+            is_default=False,
         )
-        if (await session.execute(statement)).scalar_one_or_none() is None:
-            session.add(
-                PromptTemplateVersion(
-                    workflow=workflow,
-                    version_number=1,
-                    template_body=TEXT_PROMPT_TEMPLATES[workflow.value],
-                    output_schema_version="1",
-                    change_summary="Initial structured generation contract",
-                    active=True,
-                )
-            )
+    for workflow in TextWorkflow:
+        await _insert_prompt_if_missing(
+            session,
+            workflow=workflow,
+            template_body=TEXT_PROMPT_TEMPLATES[workflow.value],
+        )
     await session.commit()
 
 
@@ -150,7 +152,6 @@ async def list_provider_capabilities(
     *,
     settings: Settings | None = None,
 ) -> list[ProviderCapabilityRead]:
-    await ensure_ai_catalog(session, settings=settings)
     statement: Select[tuple[ProviderProfile]] = (
         select(ProviderProfile)
         .where(ProviderProfile.enabled.is_(True))
@@ -179,7 +180,6 @@ async def create_candidate_generation_run(
     payload: CandidateGenerateRequest,
     queue: TextGenerationTaskQueue,
 ) -> CandidateRunCreateResult:
-    await ensure_ai_catalog(session)
     prepared, not_found, conflict = await _prepare_candidate(session, project_id, payload)
     if prepared is None:
         return CandidateRunCreateResult(None, not_found=not_found, conflict=conflict)
@@ -234,17 +234,22 @@ async def execute_candidate_generation(
     selected_session_factory = session_factory or AsyncSessionLocal
     selected_settings = settings or get_settings()
     async with selected_session_factory() as session:
-        run = await session.get(GenerationRun, str(run_id))
+        run = await lock_generation_run(session, run_id)
         if run is None:
             return None
         if run.run_type != GenerationRunType.text_generation:
             return run
-        if run.status == GenerationRunStatus.cancelled:
+        if run.status in {
+            GenerationRunStatus.succeeded,
+            GenerationRunStatus.failed,
+            GenerationRunStatus.cancelled,
+        }:
             return run
-        run.status = GenerationRunStatus.running
-        run.started_at = datetime.now(UTC)
-        run.error_code = None
-        run.error_message = None
+        if run.status == GenerationRunStatus.queued:
+            run.status = GenerationRunStatus.running
+            run.started_at = datetime.now(UTC)
+            run.error_code = None
+            run.error_message = None
         await session.commit()
         await session.refresh(run)
         try:
@@ -290,7 +295,11 @@ async def execute_candidate_generation(
             if locked_run is None:
                 return None
             run = locked_run
-            if run.status == GenerationRunStatus.cancelled:
+            if run.status in {
+                GenerationRunStatus.succeeded,
+                GenerationRunStatus.failed,
+                GenerationRunStatus.cancelled,
+            }:
                 await session.commit()
                 await session.refresh(run)
                 return run
@@ -329,11 +338,14 @@ async def execute_candidate_generation(
             await session.refresh(run)
             return run
         except TextProviderError as error:
-            await _fail_run(session, run, error.code, str(error))
-            return run
+            return await _fail_run(session, run_id, error.code, str(error))
         except Exception as error:
-            await _fail_run(session, run, "candidate_generation_failed", str(error))
-            return run
+            return await _fail_run(
+                session,
+                run_id,
+                "candidate_generation_failed",
+                str(error),
+            )
 
 
 async def list_generation_candidates(
@@ -690,41 +702,67 @@ async def _upsert_profile(
     enabled: bool,
     is_default: bool,
 ) -> None:
-    statement: Select[tuple[ProviderProfile]] = select(ProviderProfile).where(
-        ProviderProfile.profile_key == profile_key
-    )
-    profile = (await session.execute(statement)).scalar_one_or_none()
-    if profile is None:
-        session.add(
-            ProviderProfile(
-                profile_key=profile_key,
-                provider_name=provider_name,
-                display_name=display_name,
-                capabilities=ALL_TEXT_CAPABILITIES,
-                model=model,
-                default_params=default_params,
-                enabled=enabled,
-                is_default=is_default,
-            )
+    values: dict[str, object] = {
+        "id": str(uuid4()),
+        "profile_key": profile_key,
+        "provider_name": provider_name,
+        "display_name": display_name,
+        "capabilities": ALL_TEXT_CAPABILITIES,
+        "model": model,
+        "default_params": default_params,
+        "enabled": enabled,
+        "is_default": is_default,
+    }
+    update_values = {
+        key: value for key, value in values.items() if key not in {"id", "profile_key"}
+    }
+    dialect = session.get_bind().dialect.name
+    statement: Any
+    if dialect == "postgresql":
+        statement = postgresql_insert(ProviderProfile).values(**values)
+    elif dialect == "sqlite":
+        statement = sqlite_insert(ProviderProfile).values(**values)
+    else:
+        raise RuntimeError(f"Unsupported AI catalog database dialect: {dialect}")
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[ProviderProfile.profile_key],
+            set_=update_values,
         )
-        return
-    profile.provider_name = provider_name
-    profile.display_name = display_name
-    profile.capabilities = ALL_TEXT_CAPABILITIES
-    profile.model = model
-    profile.default_params = default_params
-    profile.enabled = enabled
-    profile.is_default = is_default
-
-
-async def _disable_profile_if_present(session: AsyncSession, profile_key: str) -> None:
-    statement: Select[tuple[ProviderProfile]] = select(ProviderProfile).where(
-        ProviderProfile.profile_key == profile_key
     )
-    profile = (await session.execute(statement)).scalar_one_or_none()
-    if profile is not None:
-        profile.enabled = False
-        profile.is_default = False
+
+
+async def _insert_prompt_if_missing(
+    session: AsyncSession,
+    *,
+    workflow: TextWorkflow,
+    template_body: str,
+) -> None:
+    values: dict[str, object] = {
+        "id": str(uuid4()),
+        "workflow": workflow,
+        "version_number": 1,
+        "template_body": template_body,
+        "output_schema_version": "1",
+        "change_summary": "Initial structured generation contract",
+        "active": True,
+    }
+    dialect = session.get_bind().dialect.name
+    statement: Any
+    if dialect == "postgresql":
+        statement = postgresql_insert(PromptTemplateVersion).values(**values)
+    elif dialect == "sqlite":
+        statement = sqlite_insert(PromptTemplateVersion).values(**values)
+    else:
+        raise RuntimeError(f"Unsupported AI catalog database dialect: {dialect}")
+    await session.execute(
+        statement.on_conflict_do_nothing(
+            index_elements=[
+                PromptTemplateVersion.workflow,
+                PromptTemplateVersion.version_number,
+            ]
+        )
+    )
 
 
 def build_text_provider(
@@ -755,16 +793,25 @@ def build_text_provider(
 
 async def _fail_run(
     session: AsyncSession,
-    run: GenerationRun,
+    run_id: UUID,
     error_code: str,
     error_message: str,
-) -> None:
+) -> GenerationRun | None:
+    await session.rollback()
+    run = await lock_generation_run(session, run_id)
+    if run is None:
+        return None
+    if run.status not in {GenerationRunStatus.queued, GenerationRunStatus.running}:
+        await session.commit()
+        await session.refresh(run)
+        return run
     run.status = GenerationRunStatus.failed
     run.error_code = error_code
     run.error_message = error_message[:4000]
     run.completed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(run)
+    return run
 
 
 def _candidate_score(workflow: TextWorkflow, content: BaseModel) -> float:

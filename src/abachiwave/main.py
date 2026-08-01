@@ -11,9 +11,10 @@ from fastapi.responses import JSONResponse
 from abachiwave.api.errors import ErrorCode, ErrorHint, ProblemError
 from abachiwave.api.router import api_router
 from abachiwave.core.config import get_settings
-from abachiwave.core.database import engine
+from abachiwave.core.database import AsyncSessionLocal, engine
 from abachiwave.core.logging import configure_logging
 from abachiwave.core.request_context import request_context_middleware
+from abachiwave.services.ai_generation import ensure_ai_catalog
 from abachiwave.services.storage import close_object_storage
 from abachiwave.services.task_queue import close_task_queue
 from abachiwave.services.versioning import (
@@ -39,6 +40,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = structlog.get_logger(__name__)
     logger.info("api_starting", app_env=settings.app_env)
     try:
+        async with AsyncSessionLocal() as session:
+            await ensure_ai_catalog(session, settings=settings)
         yield
     finally:
         await close_task_queue()

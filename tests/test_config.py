@@ -50,3 +50,11 @@ def test_settings_reject_default_storage_credentials_in_production() -> None:
         S3_SECRET_ACCESS_KEY="production-secret",
     )
     assert settings.app_env == "production"
+
+
+def test_settings_require_text_provider_timeout_headroom() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="TASK_TIMEOUT_SECONDS must be at least 15 seconds greater",
+    ):
+        Settings(TASK_TIMEOUT_SECONDS=74, TEXT_PROVIDER_TIMEOUT_SECONDS=60)

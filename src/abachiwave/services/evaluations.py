@@ -35,7 +35,6 @@ from abachiwave.schemas.composition import ArrangementPlan
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.ai_generation import (
     build_text_provider,
-    ensure_ai_catalog,
     get_active_prompt,
     select_provider_profile,
 )
@@ -81,7 +80,6 @@ async def create_evaluation_run(
         return EvaluationCreateResult(None, not_found="Evaluation sample set not found")
     if not samples:
         return EvaluationCreateResult(None, conflict="Sample set has no samples for workflow")
-    await ensure_ai_catalog(session)
     profile = await select_provider_profile(
         session,
         payload.provider_profile_id,

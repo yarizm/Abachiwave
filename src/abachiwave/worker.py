@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from abachiwave.core.config import get_settings
 from abachiwave.core.database import AsyncSessionLocal
 from abachiwave.models.demo import GenerationRun
-from abachiwave.services.ai_generation import execute_candidate_generation
+from abachiwave.services.ai_generation import ensure_ai_catalog, execute_candidate_generation
 from abachiwave.services.audio import execute_audio_to_midi
 from abachiwave.services.demo import execute_demo_generation
 from abachiwave.services.evaluations import (
@@ -28,6 +28,7 @@ __all__ = [
     "health_check",
     "load_generation_log_context",
     "run_text_evaluation_job",
+    "startup_worker",
 ]
 
 GenerationExecutor = Callable[[UUID], Awaitable[GenerationRun | None]]
@@ -35,6 +36,11 @@ GenerationExecutor = Callable[[UUID], Awaitable[GenerationRun | None]]
 
 async def health_check(ctx: dict[str, Any]) -> dict[str, str]:
     return {"status": "ok"}
+
+
+async def startup_worker(ctx: dict[str, Any]) -> None:
+    async with AsyncSessionLocal() as session:
+        await ensure_ai_catalog(session)
 
 
 async def generate_demo_job(ctx: dict[str, Any], run_id: str) -> dict[str, str]:
@@ -145,6 +151,7 @@ class WorkerSettings:
         run_text_evaluation_job,
     ]
     redis_settings = build_redis_settings(get_settings().redis_url)
+    on_startup = startup_worker
     job_timeout = (
         max(
             get_settings().task_timeout_seconds,

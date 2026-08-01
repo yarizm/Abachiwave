@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Protocol
@@ -87,14 +88,20 @@ class OpenAICompatibleTextProvider:
         self._transport = transport
 
     async def generate(self, request: TextGenerationRequest) -> TextGenerationResult:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            transport=self._transport,
+        ) as client:
+            responses = await asyncio.gather(
+                *(self._request_candidate(request, client) for _ in range(request.candidate_count))
+            )
         candidates: list[dict[str, object]] = []
         usage: dict[str, object] = {
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
         }
-        for _index in range(request.candidate_count):
-            response_data = await self._request_candidate(request)
+        for response_data in responses:
             choices = response_data.get("choices")
             if not isinstance(choices, list) or not choices:
                 raise InvalidProviderOutputError("Provider response did not contain choices")
@@ -110,7 +117,11 @@ class OpenAICompatibleTextProvider:
             _merge_usage(usage, response_data.get("usage"))
         return TextGenerationResult(candidates=candidates, usage=usage)
 
-    async def _request_candidate(self, request: TextGenerationRequest) -> dict[str, object]:
+    async def _request_candidate(
+        self,
+        request: TextGenerationRequest,
+        client: httpx.AsyncClient,
+    ) -> dict[str, object]:
         temperature = request.params.get("temperature", 0.7)
         payload = {
             "model": self._model,
@@ -129,19 +140,15 @@ class OpenAICompatibleTextProvider:
             },
         }
         try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.post(
-                    f"{self._api_base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                response.raise_for_status()
+            response = await client.post(
+                f"{self._api_base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
         except httpx.TimeoutException as error:
             raise TextProviderTimeoutError("Text provider request timed out") from error
         except httpx.HTTPError as error:

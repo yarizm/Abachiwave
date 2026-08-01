@@ -107,6 +107,15 @@ class Settings(BaseSettings):
             raise ValueError("production requires non-default object storage credentials")
         return self
 
+    @model_validator(mode="after")
+    def require_text_provider_timeout_headroom(self) -> "Settings":
+        if self.task_timeout_seconds < self.text_provider_timeout_seconds + 15:
+            raise ValueError(
+                "TASK_TIMEOUT_SECONDS must be at least 15 seconds greater than "
+                "TEXT_PROVIDER_TIMEOUT_SECONDS"
+            )
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
