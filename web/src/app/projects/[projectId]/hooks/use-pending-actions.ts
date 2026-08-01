@@ -18,7 +18,8 @@ export type WorkspaceActionDomain =
   | "lyricsRewrite"
   | "chords"
   | "chordsPreview"
-  | "chordsTranspose";
+  | "chordsTranspose"
+  | "midi";
 
 export function usePendingActions() {
   const [counts, setCounts] = useState<Partial<Record<WorkspaceActionDomain, number>>>({});

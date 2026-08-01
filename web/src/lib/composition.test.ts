@@ -35,9 +35,11 @@ import {
   lyricsEndpoint,
   lyricsGenerateEndpoint,
   lyricsVersionEndpoint,
+  midiAssetEndpoint,
   midiAssetDownloadEndpoint,
   midiAssetsEndpoint,
   midiGenerateEndpoint,
+  midiTransformEndpoint,
   runProgressHint,
   projectRunsEndpoint,
   projectCommentEndpoint,
@@ -202,8 +204,13 @@ function midi(versionNumber: number, createdAt: string): MidiAssetVersion {
     song_spec_id: "song-spec-1",
     lyrics_version_id: null,
     chord_version_id: null,
+    parent_version_id: null,
     version_number: versionNumber,
     kind: "melody",
+    schema_version: 2,
+    note_events: [],
+    tempo_map: [{ beat: 0, bpm: 120 }],
+    time_signature_map: [{ beat: 0, numerator: 4, denominator: 4 }],
     source_revision_request_id: null,
     source_audio_upload_id: null,
     filename: `melody-v${versionNumber}.mid`,
@@ -445,6 +452,14 @@ test("composition endpoints build nested project URLs", () => {
   assert.equal(
     midiAssetsEndpoint("http://localhost:8000", "p1"),
     "http://localhost:8000/api/v1/projects/p1/midi-assets",
+  );
+  assert.equal(
+    midiAssetEndpoint("http://localhost:8000", "p1", "m1"),
+    "http://localhost:8000/api/v1/projects/p1/midi-assets/m1",
+  );
+  assert.equal(
+    midiTransformEndpoint("http://localhost:8000", "p1"),
+    "http://localhost:8000/api/v1/projects/p1/midi/transform",
   );
   assert.equal(
     midiAssetDownloadEndpoint("http://localhost:8000", "p1", "m1"),

@@ -2,6 +2,13 @@ import type { Project } from "./projects";
 import { SongSpecVersion } from "./song-specs";
 
 export type MidiAssetKind = "chord" | "melody" | "hook";
+export type MidiTransformOperation =
+  | "quantize"
+  | "transpose"
+  | "velocity"
+  | "legato"
+  | "humanize"
+  | "scale_snap";
 export type ExportBundleStatus = "ready" | "failed";
 export type GenerationRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type GenerationRunType = "demo_generation" | "audio_to_midi" | "text_generation";
@@ -177,8 +184,13 @@ export type MidiAssetVersion = {
   song_spec_id: string;
   lyrics_version_id: string | null;
   chord_version_id: string | null;
+  parent_version_id: string | null;
   version_number: number;
   kind: MidiAssetKind;
+  schema_version: number;
+  note_events: MidiNoteEvent[];
+  tempo_map: MidiTempoEvent[];
+  time_signature_map: MidiTimeSignatureEvent[];
   source_revision_request_id: string | null;
   source_audio_upload_id: string | null;
   filename: string;
@@ -186,6 +198,44 @@ export type MidiAssetVersion = {
   size_bytes: number;
   checksum: string;
   created_at: string;
+};
+
+export type MidiNoteEvent = {
+  note_id: string;
+  section_id: string | null;
+  pitch: number;
+  start_beat: number;
+  duration_beats: number;
+  velocity: number;
+  channel: number;
+};
+
+export type MidiTempoEvent = {
+  beat: number;
+  bpm: number;
+};
+
+export type MidiTimeSignatureEvent = {
+  beat: number;
+  numerator: number;
+  denominator: number;
+};
+
+export type MidiAssetUpdatePayload = {
+  note_events: MidiNoteEvent[];
+  tempo_map?: MidiTempoEvent[];
+  time_signature_map?: MidiTimeSignatureEvent[];
+};
+
+export type MidiTransformPayload = {
+  midi_asset_id: string;
+  operation: MidiTransformOperation;
+  note_ids?: string[];
+  grid_beats?: number;
+  semitones?: number;
+  velocity_delta?: number;
+  legato_gap_beats?: number;
+  humanize_beats?: number;
 };
 
 export type ArrangementSection = {
@@ -439,12 +489,24 @@ export function midiAssetsEndpoint(apiBaseUrl: string, projectId: string): strin
   return `${apiBaseUrl}/api/v1/projects/${projectId}/midi-assets`;
 }
 
+export function midiAssetEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  midiAssetId: string,
+): string {
+  return `${midiAssetsEndpoint(apiBaseUrl, projectId)}/${midiAssetId}`;
+}
+
+export function midiTransformEndpoint(apiBaseUrl: string, projectId: string): string {
+  return `${apiBaseUrl}/api/v1/projects/${projectId}/midi/transform`;
+}
+
 export function midiAssetDownloadEndpoint(
   apiBaseUrl: string,
   projectId: string,
   midiAssetId: string,
 ): string {
-  return `${midiAssetsEndpoint(apiBaseUrl, projectId)}/${midiAssetId}/download`;
+  return `${midiAssetEndpoint(apiBaseUrl, projectId, midiAssetId)}/download`;
 }
 
 export function audioUploadsEndpoint(apiBaseUrl: string, projectId: string): string {

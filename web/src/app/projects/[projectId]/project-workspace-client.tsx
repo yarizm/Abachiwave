@@ -56,6 +56,8 @@ import {
   LyricSection,
   LyricsVersion,
   MidiAssetVersion,
+  MidiNoteEvent,
+  MidiTransformPayload,
   ProjectComment,
   RevisionApplyResponse,
   RevisionRequest,
@@ -82,6 +84,8 @@ import {
   lyricsGenerateEndpoint,
   lyricsVersionEndpoint,
   midiGenerateEndpoint,
+  midiAssetEndpoint,
+  midiTransformEndpoint,
   projectCommentEndpoint,
   projectCommentsEndpoint,
   revisionApplyEndpoint,
@@ -830,6 +834,59 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
+  async function handleMidiSave(asset: MidiAssetVersion, noteEvents: MidiNoteEvent[]) {
+    pendingActions.begin("midi");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const saved = await fetchJson<MidiAssetVersion>(
+        midiAssetEndpoint(apiBaseUrl, projectId, asset.id),
+        "MIDI save",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note_events: noteEvents }),
+        },
+      );
+      setMidiAssets((current) => sortMidiAssets([saved, ...current]));
+      showToast(t("MIDI saved"));
+      await loadWorkspace();
+    } catch (midiError) {
+      handleApiError(midiError, "Failed to save MIDI");
+      throw midiError;
+    } finally {
+      pendingActions.end("midi");
+    }
+  }
+
+  async function handleMidiTransform(
+    _asset: MidiAssetVersion,
+    payload: MidiTransformPayload,
+  ) {
+    pendingActions.begin("midi");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const transformed = await fetchJson<MidiAssetVersion>(
+        midiTransformEndpoint(apiBaseUrl, projectId),
+        "MIDI transform",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      setMidiAssets((current) => sortMidiAssets([transformed, ...current]));
+      showToast(t("MIDI transformed"));
+      await loadWorkspace();
+    } catch (midiError) {
+      handleApiError(midiError, "Failed to transform MIDI");
+      throw midiError;
+    } finally {
+      pendingActions.end("midi");
+    }
+  }
+
   async function handleAudioUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validationError = validateAudioUploadFile(audioUploadFile);
@@ -1401,7 +1458,7 @@ export default function ProjectWorkspaceClient() {
           isGeneratingLyrics={pendingActions.isPending("composition")}
           isPreviewingChords={pendingActions.isPending("chordsPreview")}
           isRewritingLyrics={pendingActions.isPending("lyricsRewrite")}
-          isSavingComposition={pendingActions.isPending("composition")}
+          isSavingComposition={pendingActions.isPending("composition", "midi")}
           isSavingChords={pendingActions.isPending("chords")}
           isSavingLyrics={pendingActions.isPending("lyrics")}
           isTransposingChords={pendingActions.isPending("chordsTranspose")}
@@ -1414,6 +1471,8 @@ export default function ProjectWorkspaceClient() {
           onChordsTranspose={handleChordsTranspose}
           onLyricsRewrite={handleLyricsRewrite}
           onLyricsSave={handleLyricsSave}
+          onMidiSave={handleMidiSave}
+          onMidiTransform={handleMidiTransform}
           projectId={projectId}
         />
       </div>
