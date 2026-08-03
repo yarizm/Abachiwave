@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import wave
 from array import array
+from importlib import resources
 from io import BytesIO
 
 import pytest
 
-from abachiwave.services.sample_renderer import SAMPLE_RATE, render_sample_demo
+from abachiwave.services.sample_renderer import SAMPLE_RATE, _load_sample, render_sample_demo
 
 
 def _samples_to_wav(samples: array[int]) -> bytes:
@@ -60,3 +61,15 @@ def test_render_has_energy_above_silence() -> None:
     )
     peak = max(abs(sample) for sample in samples)
     assert peak > 1000
+
+
+def test_load_sample_resampled_to_renderer_rate() -> None:
+    package_dir = resources.files("abachiwave.services.audio_assets")
+    with wave.open(BytesIO(package_dir.joinpath("kick.wav").read_bytes()), "rb") as reader:
+        rate = reader.getframerate()
+        frame_count = reader.getnframes()
+    resampled = _load_sample("kick")
+    assert rate == 44_100
+    assert len(resampled) == int(frame_count / (rate / SAMPLE_RATE))
+    assert resampled.itemsize == 2
+

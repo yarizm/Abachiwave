@@ -39,12 +39,13 @@ _NOTE_TO_SEMITONE = {
 
 @cache
 def _load_sample(name: str) -> array[int]:
-    """Load a packaged CC0 WAV sample as mono 16-bit ints."""
+    """Load a packaged CC0 WAV sample as mono 16-bit ints at ``SAMPLE_RATE``."""
     resource = resources.files("abachiwave.services.audio_assets").joinpath(f"{name}.wav")
     raw = resource.read_bytes()
     with wave.open(BytesIO(raw), "rb") as reader:
         sample_width = reader.getsampwidth()
         channels = reader.getnchannels()
+        rate = reader.getframerate()
         frames = reader.readframes(reader.getnframes())
     samples: array[int] = array("h")
     frame_size = sample_width * channels
@@ -54,7 +55,25 @@ def _load_sample(name: str) -> array[int]:
             start = offset + channel * sample_width
             value += int.from_bytes(frames[start : start + sample_width], "little", signed=True)
         samples.append(value // channels)
-    return samples
+    return _resample_to_output_rate(samples, rate)
+
+
+def _resample_to_output_rate(samples: array[int], rate: int) -> array[int]:
+    """Linearly interpolate a mono buffer to ``SAMPLE_RATE`` (no-op when matched)."""
+    if rate == SAMPLE_RATE or len(samples) < 2:
+        return samples
+    step = rate / SAMPLE_RATE
+    out: array[int] = array("h")
+    for i in range(int(len(samples) / step)):
+        pos = i * step
+        index = int(pos)
+        frac = pos - index
+        if index + 1 < len(samples):
+            value = samples[index] * (1 - frac) + samples[index + 1] * frac
+        else:
+            value = samples[index]
+        out.append(int(value))
+    return out
 
 
 def _place(samples: array[int], dst: array[int], at_sample: int, gain: float = 1.0) -> None:
