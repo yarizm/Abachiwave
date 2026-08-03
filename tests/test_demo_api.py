@@ -5,10 +5,12 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from abachiwave.models.demo import GenerationRun
 from abachiwave.services.demo import execute_demo_generation
 from abachiwave.services.demo_provider import (
     DemoGenerationRequest,
@@ -368,3 +370,35 @@ async def test_demo_not_found_and_cross_project_cases(
     assert missing_task_response.status_code == 404
     assert cross_project_demo_response.status_code == 404
     assert missing_download_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_worker_fails_for_unknown_run_provider(
+    client_with_demo_deps: tuple[AsyncClient, MemoryStorage, FakeQueue],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    client, storage, _queue = client_with_demo_deps
+    project_id, _arrangement = await _create_demo_ready_chain(client)
+    run = (
+        await client.post(f"/api/v1/projects/{project_id}/demo/generate", json={})
+    ).json()
+    # Simulate a run recorded with a provider that no longer exists.
+    # (In practice this happens after a config rollback; here we force it.)
+    async with session_factory() as session:
+        await session.execute(
+            sa.update(GenerationRun)
+            .where(GenerationRun.id == run["id"])
+            .values(provider_name="ghost_provider")
+        )
+        await session.commit()
+
+    executed = await execute_demo_generation(
+        UUID(run["id"]),
+        storage=storage,
+        session_factory=session_factory,
+    )
+
+    assert executed is not None
+    assert str(executed.status) == "failed"
+    assert executed.error_code == "demo_generation_failed"
+    assert "ghost_provider" in (executed.error_message or "")

@@ -23,7 +23,9 @@ from abachiwave.schemas.demo import AudioDemoVersionRead, GenerationRunRead
 from abachiwave.services.delivery import ExportAssets, resolve_export_assets
 from abachiwave.services.demo_provider import (
     DemoGenerationRequest,
+    LocalDeterministicWavProvider,
     MusicGenerationProvider,
+    UnknownDemoProviderError,
     build_demo_provider,
 )
 from abachiwave.services.events import add_project_event
@@ -92,6 +94,26 @@ async def create_demo_generation_run(
     return DemoCreateResult(run=run, missing=[], not_found=None)
 
 
+def _resolve_run_provider(run: GenerationRun) -> MusicGenerationProvider:
+    """Reconstruct the provider recorded on a run, failing loudly if unknown.
+
+    Uses settings only to pick the name->impl registry; the run's recorded
+    provider_name is authoritative. Unknown names raise so retrying an old
+    run after a rollback fails instead of producing a mismatched demo.
+    """
+    settings = get_settings()
+    if run.provider_name != settings.demo_provider_name:
+        # The run was created with a different provider than currently
+        # configured. Only the local provider can be rebuilt without extra
+        # state today.
+        if run.provider_name == "local_deterministic_wav":
+            return LocalDeterministicWavProvider()
+        raise UnknownDemoProviderError(
+            f"Run recorded provider {run.provider_name!r} which is not available"
+        )
+    return build_demo_provider(settings)
+
+
 async def execute_demo_generation(
     run_id: UUID,
     *,
@@ -100,7 +122,6 @@ async def execute_demo_generation(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> GenerationRun | None:
     selected_storage = storage or get_object_storage()
-    selected_provider = provider or build_demo_provider(get_settings())
     selected_session_factory = session_factory or AsyncSessionLocal
     stored_key: str | None = None
     async with selected_session_factory() as session:
@@ -110,6 +131,11 @@ async def execute_demo_generation(
         if run.status == GenerationRunStatus.cancelled:
             return run
         try:
+            # Resolve the provider from the run record inside the try block so
+            # an UnknownDemoProviderError is caught by the handler below and the
+            # run is marked failed instead of staying stuck in queued. A
+            # caller-supplied provider (e.g. test injection) always wins.
+            selected_provider = provider or _resolve_run_provider(run)
             run.status = GenerationRunStatus.running
             run.started_at = datetime.now(UTC)
             run.error_code = None
