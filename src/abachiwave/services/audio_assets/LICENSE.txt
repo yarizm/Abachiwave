@@ -1,0 +1,19 @@
+CC0 1.0 Universal
+
+The samples in this directory are dedicated to the public domain under the
+Creative Commons CC0 1.0 Universal Public Domain Dedication. To the extent
+possible under law, the author(s) have waived all copyright and related or
+neighboring rights to these works.
+
+Source repository: https://github.com/EwonRael/BushDrum
+License text: https://raw.githubusercontent.com/EwonRael/BushDrum/main/LICENSE
+
+Files in this directory:
+
+- kick.wav       <- https://raw.githubusercontent.com/EwonRael/BushDrum/main/kick.wav
+- snare.wav      <- https://raw.githubusercontent.com/EwonRael/BushDrum/main/snare-m.wav
+- closed_hat.wav <- https://raw.githubusercontent.com/EwonRael/BushDrum/main/hihat-closed.wav
+- open_hat.wav   <- https://raw.githubusercontent.com/EwonRael/BushDrum/main/hihat-open.wav
+
+No attribution is required. You may copy, modify, publish, and use these
+samples for any purpose, commercial or otherwise.
