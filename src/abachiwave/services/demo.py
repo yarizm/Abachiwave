@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from abachiwave.core.config import get_settings
 from abachiwave.core.database import AsyncSessionLocal
 from abachiwave.models.demo import (
     AudioDemoVersion,
@@ -22,8 +23,8 @@ from abachiwave.schemas.demo import AudioDemoVersionRead, GenerationRunRead
 from abachiwave.services.delivery import ExportAssets, resolve_export_assets
 from abachiwave.services.demo_provider import (
     DemoGenerationRequest,
-    LocalDeterministicWavProvider,
     MusicGenerationProvider,
+    build_demo_provider,
 )
 from abachiwave.services.events import add_project_event
 from abachiwave.services.generation_runs import lock_generation_run
@@ -62,7 +63,7 @@ async def create_demo_generation_run(
     if not_found or missing or assets is None:
         return DemoCreateResult(run=None, missing=missing, not_found=not_found)
 
-    selected_provider = provider or LocalDeterministicWavProvider()
+    selected_provider = provider or build_demo_provider(get_settings())
     run = GenerationRun(
         project_id=str(project_id),
         input_manifest=_build_input_manifest(assets),
@@ -99,7 +100,7 @@ async def execute_demo_generation(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> GenerationRun | None:
     selected_storage = storage or get_object_storage()
-    selected_provider = provider or LocalDeterministicWavProvider()
+    selected_provider = provider or build_demo_provider(get_settings())
     selected_session_factory = session_factory or AsyncSessionLocal
     stored_key: str | None = None
     async with selected_session_factory() as session:

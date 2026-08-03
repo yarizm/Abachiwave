@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Protocol
 
+from abachiwave.core.config import Settings
 from abachiwave.schemas.composition import ChordSection, LyricSection
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.sample_renderer import render_sample_demo
@@ -130,3 +131,21 @@ def _chord_cycle(chord_sections: list[ChordSection]) -> list[str]:
     for section in chord_sections:
         chords.extend(section.chords[: max(1, section.bars)])
     return chords or ["C"]
+
+
+class UnknownDemoProviderError(RuntimeError):
+    pass
+
+
+def build_demo_provider(settings: Settings) -> MusicGenerationProvider:
+    """Resolve a MusicGenerationProvider from settings.
+
+    Unknown provider names raise UnknownDemoProviderError rather than
+    silently falling back, so a run that records a provider which no
+    longer exists fails loudly instead of producing a mismatched demo.
+    """
+    if settings.demo_provider_name == "local_deterministic_wav":
+        return LocalDeterministicWavProvider()
+    raise UnknownDemoProviderError(
+        f"Unknown demo provider: {settings.demo_provider_name}"
+    )

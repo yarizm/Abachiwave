@@ -3,10 +3,15 @@ from __future__ import annotations
 import wave
 from io import BytesIO
 
+import pytest
+
+from abachiwave.core.config import Settings
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.demo_provider import (
     DemoGenerationRequest,
     LocalDeterministicWavProvider,
+    UnknownDemoProviderError,
+    build_demo_provider,
 )
 
 
@@ -46,3 +51,15 @@ def test_local_provider_honors_duration_clamp() -> None:
     assert audio.duration_seconds <= 60
     with wave.open(BytesIO(audio.data), "rb") as reader:
         assert reader.getnframes() == 22_050 * audio.duration_seconds
+
+
+def test_build_demo_provider_returns_default_for_known_name() -> None:
+    settings = Settings(_env_file=None, DEMO_PROVIDER_NAME="local_deterministic_wav")
+    provider = build_demo_provider(settings)
+    assert isinstance(provider, LocalDeterministicWavProvider)
+
+
+def test_build_demo_provider_raises_for_unknown_name() -> None:
+    settings = Settings(_env_file=None, DEMO_PROVIDER_NAME="does_not_exist")
+    with pytest.raises(UnknownDemoProviderError):
+        build_demo_provider(settings)

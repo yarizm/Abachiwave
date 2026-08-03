@@ -16,6 +16,10 @@ class Settings(BaseSettings):
         "development",
         validation_alias="APP_ENV",
     )
+    demo_provider_name: str = Field(
+        "local_deterministic_wav",
+        validation_alias="DEMO_PROVIDER_NAME",
+    )
     database_url: str = Field(
         "postgresql+asyncpg://abachiwave:abachiwave@localhost:5432/abachiwave",
         validation_alias="DATABASE_URL",
