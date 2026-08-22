@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "objective": "macro_onset_pitch_offset_f1",
+  "group_attribute": "singer_id",
+  "holdout_fraction": 0.25,
+  "split_seed": "abachiwave-vocadito-basic-pitch-v1",
+  "baseline_candidate_id": "baseline",
+  "minimum_macro_f1_improvement": 0.02,
+  "target_macro_onset_pitch_f1": 0.64,
+  "target_macro_onset_pitch_offset_f1": 0.5,
+  "candidates": [
+    {
+      "id": "baseline",
+      "params": {}
+    },
+    {
+      "id": "onset-0.40",
+      "params": {
+        "onset_threshold": 0.4
+      }
+    },
+    {
+      "id": "onset-0.60",
+      "params": {
+        "onset_threshold": 0.6
+      }
+    },
+    {
+      "id": "frame-0.20",
+      "params": {
+        "frame_threshold": 0.2
+      }
+    },
+    {
+      "id": "frame-0.40",
+      "params": {
+        "frame_threshold": 0.4
+      }
+    },
+    {
+      "id": "minimum-note-80ms",
+      "params": {
+        "minimum_note_length_ms": 80.0
+      }
+    },
+    {
+      "id": "minimum-note-180ms",
+      "params": {
+        "minimum_note_length_ms": 180.0
+      }
+    },
+    {
+      "id": "melodia-off",
+      "params": {
+        "melodia_trick": false
+      }
+    }
+  ]
+}
