@@ -303,18 +303,46 @@ uv run python -m support.sweep_basic_pitch_parameters \
   --output path/to/vocadito/basic-pitch-sweep-refinement.json
 ```
 
-2026-08-09 已完成到 `onset_threshold=0.75` 的开发/留出结果：
+2026-08-22 已完成 14 个候选的完整细化扫描。数据集 manifest sha256 `a3f3e9fb…`，扫描定义 sha256
+`c998dd3f…`，Provider 为 Basic Pitch 0.4.0 / TensorFlow sidecar。baseline、`onset 0.60`、`onset 0.75`
+的开发集结果与 2026-08-09 完全一致，baseline 留出集同样一致，因此两轮可直接比较。
 
-| 候选 | 开发 macro no-offset/offset F1 | 留出 macro no-offset/offset F1 | 留出 offset 相对默认值 |
+开发集按 `macro_onset_pitch_offset_f1` 排名前六：
+
+| 候选 | 开发 macro no-offset/offset F1 |
+| --- | ---: |
+| onset 0.80 | 0.584 / 0.428 |
+| onset 0.75 | 0.584 / 0.424 |
+| onset 0.85 | 0.578 / 0.422 |
+| onset 0.70 | 0.577 / 0.414 |
+| onset 0.90 | 0.544 / 0.402 |
+| onset 0.65 | 0.566 / 0.399 |
+
+开发集在 `onset 0.80` 见顶后单调下降。4 个 `onset/frame` 组合候选全部低于同 onset 的纯阈值候选，
+`frame_threshold` 方向不再保留为调参维度。
+
+留出集结果与开发集排名相反：
+
+| 候选 | 开发 offset F1 | 留出 macro no-offset/offset F1 | 留出 offset 相对默认值 |
 | --- | ---: | ---: | ---: |
-| 默认参数 | 0.513 / 0.341 | 0.539 / 0.363 | — |
-| onset 0.60 | 0.557 / 0.394 | 0.572 / 0.410 | +0.047 |
-| onset 0.75 | 0.584 / 0.424 | 0.555 / 0.408 | +0.045 |
+| 默认参数 | 0.341 | 0.539 / 0.363 | — |
+| onset 0.60 | 0.394 | 0.572 / 0.410 | +0.047 |
+| onset 0.75 | 0.424 | 0.555 / 0.408 | +0.045 |
+| onset 0.80 | 0.428 | 0.535 / 0.381 | +0.018 |
 
-提高 onset threshold 的收益能够泛化到未参与选参的歌者，但 `0.75` 的开发集优势没有在留出集
-继续扩大，不能仅因它在开发集排名第一就直接固化为默认。细化定义现已加入 `0.80～0.95` 候选，
-尚未完成真实运行；跑完尾部曲线后仍需以开发/留出一致性、完整数据集和 GuitarSet 退化情况共同
-决策。现有候选均未达到 0.64/0.50 观察目标，结论仍是“调参有效，但模型差距存在”。
+`onset 0.60` 与 `onset 0.75` 的留出值来自 2026-08-09；本轮按设计只对 baseline 与开发集冠军运行
+留出集。
+
+开发集冠军 `onset 0.80` 的留出增益 +0.018 低于 `minimum_macro_f1_improvement` 阈值 0.02，也低于
+`onset 0.60` 的 +0.047：**开发集排名在尾部与留出集泛化反相关**，这正是“开发集最高分不能单独成为
+默认参数”规则要拦截的情况。沿曲线 precision 从 0.491 升到 0.694，recall 从 0.507 降到 0.443，预测
+音符数从 1610 降到 1030（参考 1557），说明剩余差距来自漏音而非阈值位置。
+
+结论：onset threshold 的调参空间已经探完，`onset 0.60` 是当前最稳健候选，但其留出 offset F1 0.410
+距 0.50 观察目标仍差 0.09。工具输出 `recommendation:
+parameter_tuning_improves_quality_but_model_gap_remains`，
+`selected_candidate_meets_targets_on_holdout: false`。是否把 `onset 0.60` 固化为默认参数仍需 GuitarSet
+退化证据；换 Provider 的同口径比较现已具备完整的 Basic Pitch 基线。
 
 扫描工具为每个候选保存独立报告。使用 `--reuse-existing` 时，只有有效参数和有序样本 ID 与当前
 候选完全一致的报告才会复用。第三方音频和临时报告不得提交到仓库。

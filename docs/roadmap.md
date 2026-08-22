@@ -13,15 +13,15 @@
 
 ## 2. Phase 0：收口当前工作批次
 
-目标：把当前大工作树变成可复核、可继续开发的稳定基线。
+目标：把当前批次收敛为可复核、可继续开发的稳定基线。工作树拆分与 Vocadito 尾部曲线已完成，
+剩余项如下。
 
 工作项：
 
-1. 跑完 Vocadito `onset_threshold=0.80～0.95` 尾部曲线，保留同一歌手分组。
-2. 按开发集选择、留出集验证的规则决定候选；开发集最高分不能单独成为默认参数。
-3. 对最终候选执行完整 Vocadito、GuitarSet 和资源采样，不覆盖历史报告。
-4. 同步 status、architecture、benchmark 和 runbook，并执行完整后端、前端和 Compose 验证矩阵。
-5. 按迁移/后端、Worker/Provider、前端、评测/文档拆分审查范围；提交和推送需由用户明确授权。
+1. 对 `onset 0.60` 在 GuitarSet 上做退化验证，并补齐资源采样，不覆盖历史报告。
+2. 在当前 HEAD 上重跑 `npm run build`、Playwright e2e 与完整 Compose 栈，补齐验证矩阵。
+3. 依据 Vocadito 与 GuitarSet 两侧证据，决定是否把 `onset 0.60` 固化为默认参数。
+4. 推送需由用户明确授权。
 
 退出条件：
 
@@ -33,7 +33,8 @@
 
 ### 1.1 Audio-to-MIDI Provider 决策
 
-先完成 Basic Pitch 调参边界，再决定是否换模型：
+Basic Pitch 的 onset threshold 调参边界已经探完，留出集上限约 0.410，无法靠调参达到 0.50
+观察目标。因此本节的重点是替代 Provider 的同口径比较：
 
 1. 固定默认、稳健调参候选和至少一个替代 Provider。
 2. 在相同标准化音频、参考 MIDI、A_max 和容差下比较质量、时延、内存、许可证与部署成本。

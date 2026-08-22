@@ -300,9 +300,10 @@ Abachiwave Worker 写入。
 - 真实 Provider 的人工质量优势必须由盲评提交证明；离线测试只能证明 contract 和基线稳定。
 - Demo 和 reference analysis Provider 仍是本地确定性实现；Demo 已使用 CC0 采样驱动渲染，
   两者都不代表商业生成或分析质量。audio-to-MIDI 已有可选 Basic Pitch 实现和 NSynth acoustic
-  单音、GuitarSet solo/comp 和 Vocadito 40 条真实演唱观察基线。Vocadito 歌手隔离扫描证明提高
-  onset threshold 能把留出集 macro offset F1 从 0.363 提升到约 0.410，但仍低于 0.50 观察目标；
-  当前需要完成尾部曲线和替代 Provider 比较，再在目标环境确定正式质量与容量门禁。
+  单音、GuitarSet solo/comp 和 Vocadito 40 条真实演唱观察基线。Vocadito 歌手隔离扫描已跑完
+  14 个候选：留出集 macro offset F1 最高约 0.410（`onset 0.60`），开发集冠军 `onset 0.80` 反而只有
+  0.381，调参空间已探完且仍低于 0.50 观察目标；正式质量与容量门禁需依赖替代 Provider 比较和
+  目标环境实测。
 - MP3、M4A、FLAC、OGG 依赖独立 ffmpeg Worker 标准化；Docker/ffmpeg 不可用时无法完成解码。
 - 无 GPU、Stem、DAW 工程或公开分享页。
 - 专业编辑器已完成统一段落时间线、歌词逐行工具、和弦网格试听，以及结构化 MIDI 钢琴卷帘、音符编辑、变换和 Tone.js 试听。

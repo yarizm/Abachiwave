@@ -1,6 +1,6 @@
 # Abachiwave 当前状态
 
-> 快照日期：2026-08-16
+> 快照日期：2026-08-22
 >
 > 本文只记录当前已证明的实现和风险；后续工作见 [`roadmap.md`](roadmap.md)。
 
@@ -63,56 +63,62 @@ micro/macro F1、offset F1、误差、空结果率、时延、RTF、CPU/内存�
 Vocadito 两位人工标注者在同一 evaluator 下的 macro no-offset/offset F1 为 0.722/0.633，说明
 转换与容差口径可信，当前主要瓶颈位于 Provider。
 
-已完成按 `singer_id` 隔离的 30 条开发集 / 10 条留出集参数扫描：
+2026-08-22 已跑完按 `singer_id` 隔离的 14 候选完整扫描（30 条开发集 / 10 条留出集）。baseline、
+`onset 0.60`、`onset 0.75` 的开发集与 baseline 留出集结果与 2026-08-09 完全一致，两轮可比：
 
-- `onset_threshold=0.60`：开发集 offset F1 比默认值提高 0.053，留出集提高 0.047，留出集达到 0.410。
-- `onset_threshold=0.75`：开发集提高 0.083，留出集提高 0.045，留出集为 0.408。
-- `0.75` 的开发集优势没有在留出歌者上扩大，当前不能只按开发集最高分固化它。
-- `0.80～0.95` 扩展候选已写入定义但尚未运行；即使现有调参收益成立，距离 0.50 offset 观察目标仍有差距。
+- 开发集 offset F1 在 `onset 0.80` 见顶（0.428），`0.85` 起单调下降；4 个 `onset/frame` 组合全部跑输
+  同 onset 的纯阈值候选。
+- 开发集冠军 `onset 0.80` 的留出集 offset F1 只有 0.381，增益 +0.018，低于 0.02 阈值，也低于
+  `onset 0.60` 的 +0.047。开发集排名在尾部与留出集泛化反相关。
+- `onset 0.60` 仍是最稳健候选（留出集 0.410），但距 0.50 观察目标仍差 0.09。
+- 沿曲线 precision 从 0.491 升到 0.694，recall 从 0.507 降到 0.443：剩余差距来自漏音，不是阈值位置。
+- 结论是 onset threshold 的调参空间已探完，模型差距无法靠调参关闭。
 
 这些结果是模型选择证据，不是正式 release gate。详细口径见
 [`audio-to-midi-benchmark.md`](audio-to-midi-benchmark.md)。
 
 ## 5. 当前验证证据
 
-2026-08-16 当前工作树验证：
+2026-08-22 对当前 HEAD 验证：
 
 ```text
-uv run ruff check .    passed
-uv run mypy            148 source files, no issues
-uv run pytest -q       233 passed
-uv run alembic heads   202608100001 (head)
-```
-
-最近一次完整前端与真实 Compose 验证为 2026-08-09：
-
-```text
+uv run ruff check .     passed
+uv run mypy             148 source files, no issues
+uv run pytest -q        233 passed
+uv run alembic heads    202608100001 (head)
 npm run lint            passed
 npm run typecheck       passed
 npm test                84 passed
+```
+
+同日 `basic-pitch` sidecar 以 Basic Pitch 0.4.0 / TensorFlow runtime 就绪，完成 440 次真实推理的
+Vocadito 参数扫描，中位 RTF 0.023、中位时延 0.44 s、空结果率 0。
+
+`npm run build`、Playwright e2e 与完整 Compose 栈本轮**未**重跑；最近一次为 2026-08-09：
+
+```text
 npm run build           passed
 npm run test:e2e        25 passed, 1 desktop-only skip
 Basic Pitch faults      5 scenarios passed
 ```
 
 当时 PostgreSQL、Redis、MinIO、API、Web、通用 Worker、ffmpeg Worker 和 audio MIDI Worker 均通过
-健康检查，真实 MP3 标准化与应用级 Basic Pitch 转录成功。当前 Docker Desktop 未启动，因此这些是
-最近的实机证据，不表示服务此刻在线。
+健康检查，真实 MP3 标准化与应用级 Basic Pitch 转录成功。这是最近的全栈实机证据，不表示这些服务
+此刻在线。
 
 ## 6. 当前工作树与风险
 
-- 分支为 `main`，领先 `origin/main` 36 个提交。
-- 音频链路、Provider、评测、前后端和文档形成一批较大的未提交修改；不得通过 reset、checkout
-  或清理命令覆盖。
+- 分支为 `main`，工作树干净，尚未推送 `origin/main`。
+- 原先的大批未提交修改已按依赖序拆成 7 个提交：gitignore、数据层、Provider/Worker、API/编排、
+  前端、评测框架、文档。每个提交是一个独立审查单元。
 - 当前 migration 只有一个 head：`202608100001`。
-- 大多数新功能已有单元/API/浏览器覆盖，但参数扫描扩展、文档重组和最终完整矩阵尚未形成一个
-  可审查的提交边界。
+- 大多数新功能已有单元/API/浏览器覆盖；`npm run build` 与浏览器 e2e 尚未在当前 HEAD 上重跑。
 - Compose 使用默认开发凭据、开发服务器和绑定挂载，不是生产部署方案。
 
 ## 7. 当前未完成项
 
-- 跑完 Basic Pitch 尾部参数曲线，决定稳健参数并执行最终全量/资源复测。
-- 若无法达到观察目标，完成替换或组合 Audio-to-MIDI Provider 的同口径比较。
+- 完成替换或组合 Audio-to-MIDI Provider 的同口径比较；Basic Pitch 调参已探完，不再是可行路径。
+- 补齐 `onset 0.60` 在 GuitarSet 上的退化证据，再决定是否把它固化为默认参数。
 - 扩大 GuitarSet 演奏者、风格、乐器和不同长度音频覆盖，建立容量建议。
 - 为参考分析接入真实 Provider，并建立 BPM、key、结构和和弦的容差评测。
 - 增加长音频波形缩放和基于真实 Provider 能力的警告/置信度交互。
