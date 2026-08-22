@@ -48,11 +48,22 @@ web/blob-report/
 output/
 *.tsbuildinfo
 
-# Local planning and operations documents
+# Local-only planning artifacts; canonical docs are explicitly allowed below
 .github/pull_request_template.md
 README.en.md
 *_development_plan.md
 milestone_*_development_plan.md
 docs/*
+!docs/README.md
 !docs/api.md
 !docs/architecture.md
+!docs/audio-to-midi-benchmark.md
+!docs/backup-restore.md
+!docs/development.md
+!docs/roadmap.md
+!docs/runbook.md
+!docs/status.md
+!docs/plans/
+docs/plans/*
+!docs/plans/00-status-and-roadmap.md
+!docs/plans/02-full-product.md
