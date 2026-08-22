@@ -13,14 +13,14 @@
 
 ## 2. Phase 0：收口当前工作批次
 
-目标：把当前批次收敛为可复核、可继续开发的稳定基线。工作树拆分与 Vocadito 尾部曲线已完成，
-剩余项如下。
+目标：把当前批次收敛为可复核、可继续开发的稳定基线。工作树拆分、Vocadito 尾部曲线和验证矩阵
+已完成，剩余项如下。
 
 工作项：
 
 1. 对 `onset 0.60` 在 GuitarSet 上做退化验证，并补齐资源采样，不覆盖历史报告。
-2. 在当前 HEAD 上重跑 `npm run build`、Playwright e2e 与完整 Compose 栈，补齐验证矩阵。
-3. 依据 Vocadito 与 GuitarSet 两侧证据，决定是否把 `onset 0.60` 固化为默认参数。
+2. 依据 Vocadito 与 GuitarSet 两侧证据，决定是否把 `onset 0.60` 固化为默认参数。
+3. 在 `ffmpeg` profile 下补跑真实压缩格式解码链路。
 4. 推送需由用户明确授权。
 
 退出条件：

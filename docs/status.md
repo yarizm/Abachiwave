@@ -79,32 +79,36 @@ Vocadito 两位人工标注者在同一 evaluator 下的 macro no-offset/offset 
 
 ## 5. 当前验证证据
 
-2026-08-22 对当前 HEAD 验证：
+2026-08-22 对当前 HEAD 完成完整验证矩阵：
 
 ```text
-uv run ruff check .     passed
-uv run mypy             148 source files, no issues
-uv run pytest -q        233 passed
-uv run alembic heads    202608100001 (head)
-npm run lint            passed
-npm run typecheck       passed
-npm test                84 passed
+uv run ruff check .              passed
+uv run mypy                      148 source files, no issues
+uv run pytest -q                 233 passed
+uv run alembic heads             202608100001 (head)
+npm run lint                     passed
+npm run typecheck                passed
+npm test                         84 passed
+npm run build                    passed
+docker compose up -d --build     8 services healthy
+scripts/smoke_mvp.py             ok
+npm run test:e2e                 25 passed, 1 desktop-only skip
+Basic Pitch faults               5 scenarios passed
 ```
 
-同日 `basic-pitch` sidecar 以 Basic Pitch 0.4.0 / TensorFlow runtime 就绪，完成 440 次真实推理的
-Vocadito 参数扫描，中位 RTF 0.023、中位时延 0.44 s、空结果率 0。
+PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `basic-pitch` sidecar 均通过
+健康检查，`/health/ready` 三个依赖全部 ok。smoke 覆盖完整创作链，含音频上传与 MIDI 抽取。
 
-`npm run build`、Playwright e2e 与完整 Compose 栈本轮**未**重跑；最近一次为 2026-08-09：
+故障矩阵 5 个场景的终态与 runbook 规定一致：`sidecar_disconnect` →
+`audio_to_midi_provider_unavailable`、`sidecar_recovery` → `succeeded`、`sidecar_timeout` →
+`audio_to_midi_provider_timeout`、`running_cancel` → `task_cancelled`、`worker_restart` →
+`task_interrupted`。注入结束后各容器与 Provider 设置均已恢复。
 
-```text
-npm run build           passed
-npm run test:e2e        25 passed, 1 desktop-only skip
-Basic Pitch faults      5 scenarios passed
-```
+同日 `basic-pitch` sidecar 完成 440 次真实推理的 Vocadito 参数扫描，中位 RTF 0.023、中位时延
+0.44 s、空结果率 0。
 
-当时 PostgreSQL、Redis、MinIO、API、Web、通用 Worker、ffmpeg Worker 和 audio MIDI Worker 均通过
-健康检查，真实 MP3 标准化与应用级 Basic Pitch 转录成功。这是最近的全栈实机证据，不表示这些服务
-此刻在线。
+本轮**未**启动 `ffmpeg` profile，因此真实 MP3/M4A/FLAC/OGG 标准化未重新验证；最近一次实机证据为
+2026-08-09。
 
 ## 6. 当前工作树与风险
 
@@ -112,7 +116,7 @@ Basic Pitch faults      5 scenarios passed
 - 原先的大批未提交修改已按依赖序拆成 7 个提交：gitignore、数据层、Provider/Worker、API/编排、
   前端、评测框架、文档。每个提交是一个独立审查单元。
 - 当前 migration 只有一个 head：`202608100001`。
-- 大多数新功能已有单元/API/浏览器覆盖；`npm run build` 与浏览器 e2e 尚未在当前 HEAD 上重跑。
+- 新功能已有单元、API、浏览器和故障注入覆盖；仅 `ffmpeg` profile 的真实解码链路未在当前 HEAD 重跑。
 - Compose 使用默认开发凭据、开发服务器和绑定挂载，不是生产部署方案。
 
 ## 7. 当前未完成项
