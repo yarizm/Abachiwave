@@ -9,6 +9,9 @@ from arq.connections import ArqRedis, RedisSettings
 
 from abachiwave.core.config import get_settings
 
+AUDIO_FFMPEG_QUEUE_NAME = "arq:audio-ffmpeg"
+AUDIO_TO_MIDI_QUEUE_NAME = "arq:audio-midi"
+
 
 class DemoTaskQueue(Protocol):
     async def enqueue_demo_generation(self, run_id: UUID) -> str: ...
@@ -16,6 +19,14 @@ class DemoTaskQueue(Protocol):
 
 class AudioToMidiTaskQueue(Protocol):
     async def enqueue_audio_to_midi(self, run_id: UUID) -> str: ...
+
+
+class AudioDerivativeTaskQueue(Protocol):
+    async def enqueue_audio_derivative(self, run_id: UUID) -> str: ...
+
+
+class ReferenceAnalysisTaskQueue(Protocol):
+    async def enqueue_reference_analysis(self, run_id: UUID) -> str: ...
 
 
 class TextGenerationTaskQueue(Protocol):
@@ -59,9 +70,31 @@ class ArqTaskQueue:
 
     async def enqueue_audio_to_midi(self, run_id: UUID) -> str:
         pool = await self._get_pool()
-        job = await pool.enqueue_job("extract_midi_from_audio_job", str(run_id))
+        job = await pool.enqueue_job(
+            "extract_midi_from_audio_job",
+            str(run_id),
+            _queue_name=AUDIO_TO_MIDI_QUEUE_NAME,
+        )
         if job is None:
             raise RuntimeError("Audio-to-MIDI job could not be enqueued")
+        return str(job.job_id)
+
+    async def enqueue_audio_derivative(self, run_id: UUID) -> str:
+        pool = await self._get_pool()
+        job = await pool.enqueue_job(
+            "normalize_audio_derivative_job",
+            str(run_id),
+            _queue_name=AUDIO_FFMPEG_QUEUE_NAME,
+        )
+        if job is None:
+            raise RuntimeError("Audio derivative job could not be enqueued")
+        return str(job.job_id)
+
+    async def enqueue_reference_analysis(self, run_id: UUID) -> str:
+        pool = await self._get_pool()
+        job = await pool.enqueue_job("analyze_reference_audio_job", str(run_id))
+        if job is None:
+            raise RuntimeError("Reference analysis job could not be enqueued")
         return str(job.job_id)
 
     async def enqueue_text_generation(self, run_id: UUID) -> str:
@@ -89,6 +122,14 @@ def get_demo_task_queue() -> DemoTaskQueue:
 
 
 def get_audio_to_midi_task_queue() -> AudioToMidiTaskQueue:
+    return get_arq_task_queue()
+
+
+def get_audio_derivative_task_queue() -> AudioDerivativeTaskQueue:
+    return get_arq_task_queue()
+
+
+def get_reference_analysis_task_queue() -> ReferenceAnalysisTaskQueue:
     return get_arq_task_queue()
 
 

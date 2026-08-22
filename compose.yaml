@@ -62,13 +62,17 @@ services:
       uvicorn abachiwave.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       APP_ENV: development
+      DEMO_PROVIDER_NAME: ${DEMO_PROVIDER_NAME:-local_deterministic_wav}
+      AUDIO_TO_MIDI_PROVIDER_NAME: ${AUDIO_TO_MIDI_PROVIDER_NAME:-local_monophonic_wav_to_midi}
+      BASIC_PITCH_SERVICE_URL: ${BASIC_PITCH_SERVICE_URL:-http://basic-pitch:8080}
+      BASIC_PITCH_TIMEOUT_SECONDS: ${BASIC_PITCH_TIMEOUT_SECONDS:-90}
       DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET: abachiwave-dev
-      TASK_TIMEOUT_SECONDS: 120
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-120}
       TEXT_PROVIDER_API_BASE_URL: ${TEXT_PROVIDER_API_BASE_URL:-}
       TEXT_PROVIDER_API_KEY: ${TEXT_PROVIDER_API_KEY:-}
       TEXT_PROVIDER_MODEL: ${TEXT_PROVIDER_MODEL:-}
@@ -101,13 +105,14 @@ services:
     command: arq abachiwave.worker.WorkerSettings
     environment:
       APP_ENV: development
+      DEMO_PROVIDER_NAME: ${DEMO_PROVIDER_NAME:-local_deterministic_wav}
       DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET: abachiwave-dev
-      TASK_TIMEOUT_SECONDS: 120
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-120}
       TEXT_PROVIDER_API_BASE_URL: ${TEXT_PROVIDER_API_BASE_URL:-}
       TEXT_PROVIDER_API_KEY: ${TEXT_PROVIDER_API_KEY:-}
       TEXT_PROVIDER_MODEL: ${TEXT_PROVIDER_MODEL:-}
@@ -125,6 +130,84 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "arq", "--check", "abachiwave.worker.WorkerSettings"]
+      interval: 10s
+      timeout: 15s
+      retries: 6
+
+  audio-midi-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: arq abachiwave.worker.AudioToMidiWorkerSettings
+    environment:
+      APP_ENV: development
+      AUDIO_TO_MIDI_PROVIDER_NAME: ${AUDIO_TO_MIDI_PROVIDER_NAME:-local_monophonic_wav_to_midi}
+      BASIC_PITCH_SERVICE_URL: ${BASIC_PITCH_SERVICE_URL:-http://basic-pitch:8080}
+      BASIC_PITCH_TIMEOUT_SECONDS: ${BASIC_PITCH_TIMEOUT_SECONDS:-90}
+      DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: abachiwave-dev
+      TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-120}
+      PYTHONPATH: /app/src
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "arq", "--check", "abachiwave.worker.AudioToMidiWorkerSettings"]
+      interval: 10s
+      timeout: 15s
+      retries: 6
+
+  basic-pitch:
+    profiles: ["basic-pitch"]
+    build:
+      context: .
+      dockerfile: Dockerfile.basic-pitch
+    environment:
+      BASIC_PITCH_MAX_AUDIO_BYTES: 26214400
+      BASIC_PITCH_EXPECTED_VERSION: "0.4.0"
+    ports:
+      - "127.0.0.1:8010:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  ffmpeg-worker:
+    profiles: ["ffmpeg"]
+    build:
+      context: .
+      dockerfile: Dockerfile.ffmpeg-worker
+    command: arq abachiwave.worker.FFmpegWorkerSettings
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: abachiwave-dev
+      TASK_TIMEOUT_SECONDS: 120
+      FFMPEG_BINARY: ffmpeg
+      FFMPEG_TIMEOUT_SECONDS: 120
+      PYTHONPATH: /app/src
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ffmpeg -version >/dev/null && arq --check abachiwave.worker.FFmpegWorkerSettings"]
       interval: 10s
       timeout: 15s
       retries: 6

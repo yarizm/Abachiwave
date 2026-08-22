@@ -6,12 +6,18 @@ from abachiwave.core.config import Settings, get_settings
 
 def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DEMO_PROVIDER_NAME", "local_deterministic_wav")
+    monkeypatch.setenv("AUDIO_TO_MIDI_PROVIDER_NAME", "spotify_basic_pitch")
+    monkeypatch.setenv("BASIC_PITCH_SERVICE_URL", "http://basic-pitch-test:8080")
+    monkeypatch.setenv("BASIC_PITCH_TIMEOUT_SECONDS", "120")
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///test.db")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6380/1")
     monkeypatch.setenv("S3_BUCKET", "abachiwave-test")
     monkeypatch.setenv("READINESS_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("VERSION_WRITE_MAX_RETRIES", "4")
     monkeypatch.setenv("TASK_TIMEOUT_SECONDS", "240")
+    monkeypatch.setenv("FFMPEG_BINARY", "ffmpeg-custom")
+    monkeypatch.setenv("FFMPEG_TIMEOUT_SECONDS", "180")
     monkeypatch.setenv("TEXT_EVALUATION_TIMEOUT_SECONDS", "900")
     monkeypatch.setenv("MAX_PROJECT_UPLOADS", "12")
     monkeypatch.setenv("REQUEST_ID_HEADER", "X-Correlation-ID")
@@ -20,12 +26,18 @@ def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     settings = get_settings()
 
     assert settings.app_env == "test"
+    assert settings.demo_provider_name == "local_deterministic_wav"
+    assert settings.audio_to_midi_provider_name == "spotify_basic_pitch"
+    assert settings.basic_pitch_service_url == "http://basic-pitch-test:8080"
+    assert settings.basic_pitch_timeout_seconds == 120
     assert settings.database_url == "sqlite+aiosqlite:///test.db"
     assert settings.redis_url == "redis://localhost:6380/1"
     assert settings.s3_bucket == "abachiwave-test"
     assert settings.readiness_timeout_seconds == 5
     assert settings.version_write_max_retries == 4
     assert settings.task_timeout_seconds == 240
+    assert settings.ffmpeg_binary == "ffmpeg-custom"
+    assert settings.ffmpeg_timeout_seconds == 180
     assert settings.text_evaluation_timeout_seconds == 900
     assert settings.max_project_uploads == 12
     assert settings.request_id_header == "X-Correlation-ID"
@@ -58,3 +70,15 @@ def test_settings_require_text_provider_timeout_headroom() -> None:
         match="TASK_TIMEOUT_SECONDS must be at least 15 seconds greater",
     ):
         Settings(TASK_TIMEOUT_SECONDS=74, TEXT_PROVIDER_TIMEOUT_SECONDS=60)
+
+
+def test_settings_require_basic_pitch_timeout_headroom() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="TASK_TIMEOUT_SECONDS must be at least 15 seconds greater",
+    ):
+        Settings(
+            AUDIO_TO_MIDI_PROVIDER_NAME="spotify_basic_pitch",
+            TASK_TIMEOUT_SECONDS=104,
+            BASIC_PITCH_TIMEOUT_SECONDS=90,
+        )

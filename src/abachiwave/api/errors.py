@@ -47,6 +47,7 @@ class ErrorCode(StrEnum):
     SONG_SPEC_INCOMPLETE = "song_spec_incomplete"
     INTERNAL_ERROR = "internal_error"
     SONG_STRUCTURE_CHANGE_REQUIRES_PREVIEW = "song_structure_change_requires_preview"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
 
 
 class ErrorHint(StrEnum):

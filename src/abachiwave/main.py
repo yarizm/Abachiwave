@@ -15,6 +15,11 @@ from abachiwave.core.database import AsyncSessionLocal, engine
 from abachiwave.core.logging import configure_logging
 from abachiwave.core.request_context import request_context_middleware
 from abachiwave.services.ai_generation import ensure_ai_catalog
+from abachiwave.services.audio_to_midi_provider import (
+    UnknownAudioToMidiProviderError,
+    build_audio_to_midi_provider,
+)
+from abachiwave.services.demo_provider import UnknownDemoProviderError, build_demo_provider
 from abachiwave.services.storage import close_object_storage
 from abachiwave.services.task_queue import close_task_queue
 from abachiwave.services.versioning import (
@@ -40,6 +45,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = structlog.get_logger(__name__)
     logger.info("api_starting", app_env=settings.app_env)
     try:
+        build_demo_provider(settings)
+        build_audio_to_midi_provider(settings)
         async with AsyncSessionLocal() as session:
             await ensure_ai_catalog(session, settings=settings)
         yield
@@ -55,6 +62,34 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Abachiwave API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.middleware("http")(request_context_middleware)
+
+    @app.exception_handler(UnknownDemoProviderError)
+    async def handle_unknown_demo_provider(
+        _request: Request,
+        _error: UnknownDemoProviderError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Demo provider is unavailable"},
+            headers={
+                _ERROR_CODE_HEADER: ErrorCode.PROVIDER_UNAVAILABLE.value,
+                _ERROR_HINT_HEADER: ErrorHint.CONTACT_SUPPORT.value,
+            },
+        )
+
+    @app.exception_handler(UnknownAudioToMidiProviderError)
+    async def handle_unknown_audio_to_midi_provider(
+        _request: Request,
+        _error: UnknownAudioToMidiProviderError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Audio-to-MIDI provider is unavailable"},
+            headers={
+                _ERROR_CODE_HEADER: ErrorCode.PROVIDER_UNAVAILABLE.value,
+                _ERROR_HINT_HEADER: ErrorHint.CONTACT_SUPPORT.value,
+            },
+        )
 
     @app.exception_handler(ProblemError)
     async def handle_problem_error(
@@ -125,7 +160,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", settings.request_id_header],
         expose_headers=[_ERROR_CODE_HEADER, _ERROR_HINT_HEADER, settings.request_id_header],
     )

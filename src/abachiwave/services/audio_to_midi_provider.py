@@ -2,9 +2,12 @@ import wave
 from dataclasses import dataclass
 from io import BytesIO
 from math import log2, sqrt
+from typing import Protocol
 
+import httpx
 from mido import Message, MetaMessage, MidiFile, MidiTrack, bpm2tempo
 
+from abachiwave.core.config import Settings, get_settings
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.midi import TICKS_PER_BEAT
 
@@ -24,6 +27,36 @@ class GeneratedMidi:
     provider_name: str
     provider_version: str
     provider_params: dict[str, object]
+    provider_usage: dict[str, object]
+
+
+class AudioToMidiProvider(Protocol):
+    name: str
+    version: str
+
+    def default_params(self) -> dict[str, object]: ...
+
+    def extract_midi(self, request: AudioToMidiRequest) -> GeneratedMidi: ...
+
+
+class UnknownAudioToMidiProviderError(ValueError):
+    pass
+
+
+class AudioToMidiProviderError(RuntimeError):
+    code = "audio_to_midi_provider_failed"
+
+
+class AudioToMidiProviderTimeoutError(AudioToMidiProviderError):
+    code = "audio_to_midi_provider_timeout"
+
+
+class AudioToMidiProviderUnavailableError(AudioToMidiProviderError):
+    code = "audio_to_midi_provider_unavailable"
+
+
+class AudioToMidiProviderResponseError(AudioToMidiProviderError):
+    code = "audio_to_midi_provider_invalid_response"
 
 
 class LocalMonophonicWavToMidiProvider:
@@ -59,7 +92,151 @@ class LocalMonophonicWavToMidiProvider:
             provider_name=self.name,
             provider_version=self.version,
             provider_params=params,
+            provider_usage={"estimated_frame_count": len(notes)},
         )
+
+
+class BasicPitchHttpAudioToMidiProvider:
+    """HTTP adapter for the isolated Spotify Basic Pitch inference service."""
+
+    name = "spotify_basic_pitch"
+    version = "0.4.0"
+
+    def __init__(
+        self,
+        service_url: str,
+        *,
+        timeout_seconds: float,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._service_url = service_url.rstrip("/")
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport
+
+    def default_params(self) -> dict[str, object]:
+        return dict[str, object](basic_pitch_default_params())
+
+    def extract_midi(self, request: AudioToMidiRequest) -> GeneratedMidi:
+        params = resolve_basic_pitch_params(request.provider_params)
+        form = {
+            "onset_threshold": str(params["onset_threshold"]),
+            "frame_threshold": str(params["frame_threshold"]),
+            "minimum_note_length_ms": str(params["minimum_note_length_ms"]),
+            "minimum_frequency_hz": str(params["minimum_frequency_hz"]),
+            "maximum_frequency_hz": str(params["maximum_frequency_hz"]),
+            "melodia_trick": "true" if params["melodia_trick"] else "false",
+            "midi_tempo": str(request.song_spec.tempo_bpm or 120),
+        }
+        try:
+            with httpx.Client(
+                timeout=self._timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                response = client.post(
+                    f"{self._service_url}/v1/transcriptions",
+                    data=form,
+                    files={"file": (request.filename, request.audio_bytes, "audio/wav")},
+                )
+        except httpx.TimeoutException as exc:
+            raise AudioToMidiProviderTimeoutError("Basic Pitch service timed out") from exc
+        except httpx.RequestError as exc:
+            raise AudioToMidiProviderUnavailableError(
+                "Basic Pitch service is unavailable"
+            ) from exc
+        if response.status_code != 200:
+            raise AudioToMidiProviderResponseError(
+                f"Basic Pitch service returned HTTP {response.status_code}"
+            )
+        returned_version = response.headers.get("X-Basic-Pitch-Version")
+        if returned_version != self.version:
+            raise AudioToMidiProviderResponseError(
+                "Basic Pitch service version does not match the run"
+            )
+        if not response.content.startswith(b"MThd"):
+            raise AudioToMidiProviderResponseError(
+                "Basic Pitch service returned invalid MIDI"
+            )
+        note_count = _optional_non_negative_int(response.headers.get("X-Note-Count"))
+        filename = f"{_filename_stem(request.filename)}-basic-pitch-melody.mid"
+        return GeneratedMidi(
+            data=response.content,
+            filename=filename,
+            provider_name=self.name,
+            provider_version=self.version,
+            provider_params=dict[str, object](params),
+            provider_usage={
+                "note_count": note_count,
+                "service_runtime": response.headers.get("X-Model-Runtime", "unknown"),
+            },
+        )
+
+
+def build_audio_to_midi_provider(
+    settings: Settings | None = None,
+    *,
+    provider_name: str | None = None,
+) -> AudioToMidiProvider:
+    resolved_settings = settings or get_settings()
+    name = provider_name or resolved_settings.audio_to_midi_provider_name
+    if name == LocalMonophonicWavToMidiProvider.name:
+        return LocalMonophonicWavToMidiProvider()
+    if name == BasicPitchHttpAudioToMidiProvider.name:
+        return BasicPitchHttpAudioToMidiProvider(
+            resolved_settings.basic_pitch_service_url,
+            timeout_seconds=resolved_settings.basic_pitch_timeout_seconds,
+        )
+    raise UnknownAudioToMidiProviderError(f"Unknown audio-to-MIDI provider: {name}")
+
+
+def basic_pitch_default_params() -> dict[str, bool | float]:
+    return {
+        "onset_threshold": 0.5,
+        "frame_threshold": 0.3,
+        "minimum_note_length_ms": 127.7,
+        "minimum_frequency_hz": 55.0,
+        "maximum_frequency_hz": 1760.0,
+        "melodia_trick": True,
+    }
+
+
+def resolve_basic_pitch_params(
+    overrides: dict[str, object],
+) -> dict[str, bool | float]:
+    defaults = basic_pitch_default_params()
+    unknown = sorted(set(overrides) - set(defaults))
+    if unknown:
+        raise ValueError(f"unknown Basic Pitch provider parameters: {unknown}")
+    params: dict[str, object] = {**defaults, **overrides}
+    resolved: dict[str, bool | float] = {
+        "onset_threshold": _bounded_float_param(params, "onset_threshold", 0, 1),
+        "frame_threshold": _bounded_float_param(params, "frame_threshold", 0, 1),
+        "minimum_note_length_ms": _bounded_float_param(
+            params,
+            "minimum_note_length_ms",
+            1,
+            10_000,
+        ),
+        "minimum_frequency_hz": _bounded_float_param(
+            params,
+            "minimum_frequency_hz",
+            1,
+            20_000,
+        ),
+        "maximum_frequency_hz": _bounded_float_param(
+            params,
+            "maximum_frequency_hz",
+            1,
+            20_000,
+        ),
+        "melodia_trick": _bool_param(params, "melodia_trick"),
+    }
+    minimum_frequency = resolved["minimum_frequency_hz"]
+    maximum_frequency = resolved["maximum_frequency_hz"]
+    if not isinstance(minimum_frequency, float) or not isinstance(maximum_frequency, float):
+        raise TypeError("Basic Pitch frequency parameters must be numeric")
+    if minimum_frequency >= maximum_frequency:
+        raise ValueError("minimum_frequency_hz must be below maximum_frequency_hz")
+    return resolved
 
 
 def _estimate_notes(
@@ -186,3 +363,32 @@ def _float_param(params: dict[str, object], key: str) -> float:
     if not isinstance(value, str | int | float):
         raise ValueError(f"{key} must be numeric")
     return float(value)
+
+
+def _bounded_float_param(
+    params: dict[str, object],
+    key: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = _float_param(params, key)
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{key} must be between {minimum} and {maximum}")
+    return value
+
+
+def _bool_param(params: dict[str, object], key: str) -> bool:
+    value = params[key]
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _optional_non_negative_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None

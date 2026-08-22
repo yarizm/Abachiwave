@@ -20,6 +20,20 @@ class Settings(BaseSettings):
         "local_deterministic_wav",
         validation_alias="DEMO_PROVIDER_NAME",
     )
+    audio_to_midi_provider_name: str = Field(
+        "local_monophonic_wav_to_midi",
+        validation_alias="AUDIO_TO_MIDI_PROVIDER_NAME",
+    )
+    basic_pitch_service_url: str = Field(
+        "http://basic-pitch:8080",
+        validation_alias="BASIC_PITCH_SERVICE_URL",
+    )
+    basic_pitch_timeout_seconds: float = Field(
+        90.0,
+        gt=0,
+        le=1800,
+        validation_alias="BASIC_PITCH_TIMEOUT_SECONDS",
+    )
     database_url: str = Field(
         "postgresql+asyncpg://abachiwave:abachiwave@localhost:5432/abachiwave",
         validation_alias="DATABASE_URL",
@@ -46,6 +60,13 @@ class Settings(BaseSettings):
         ge=1,
         le=3600,
         validation_alias="TASK_TIMEOUT_SECONDS",
+    )
+    ffmpeg_binary: str = Field("ffmpeg", validation_alias="FFMPEG_BINARY")
+    ffmpeg_timeout_seconds: int = Field(
+        120,
+        ge=1,
+        le=3600,
+        validation_alias="FFMPEG_TIMEOUT_SECONDS",
     )
     text_provider_api_base_url: str | None = Field(
         None,
@@ -96,6 +117,9 @@ class Settings(BaseSettings):
         "s3_secret_access_key",
         "s3_bucket",
         "request_id_header",
+        "ffmpeg_binary",
+        "audio_to_midi_provider_name",
+        "basic_pitch_service_url",
     )
     @classmethod
     def require_non_empty(cls, value: str) -> str:
@@ -117,6 +141,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TASK_TIMEOUT_SECONDS must be at least 15 seconds greater than "
                 "TEXT_PROVIDER_TIMEOUT_SECONDS"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_basic_pitch_timeout_headroom(self) -> "Settings":
+        if (
+            self.audio_to_midi_provider_name == "spotify_basic_pitch"
+            and self.task_timeout_seconds < self.basic_pitch_timeout_seconds + 15
+        ):
+            raise ValueError(
+                "TASK_TIMEOUT_SECONDS must be at least 15 seconds greater than "
+                "BASIC_PITCH_TIMEOUT_SECONDS"
             )
         return self
 

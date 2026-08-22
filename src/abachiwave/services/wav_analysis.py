@@ -1,6 +1,7 @@
 import wave
 from dataclasses import dataclass
 from io import BytesIO
+from math import ceil
 
 WAVEFORM_PEAK_COUNT = 80
 
@@ -36,6 +37,40 @@ def analyze_wav_bytes(data: bytes) -> WavMetadata:
         channels=channels,
         waveform_peaks=_waveform_peaks(frames, sample_width, channels),
     )
+
+
+def slice_wav_bytes(data: bytes, *, start_seconds: float, end_seconds: float) -> bytes:
+    if start_seconds < 0 or end_seconds - start_seconds < 0.1:
+        raise WavAnalysisError("Invalid WAV analysis range")
+    try:
+        with wave.open(BytesIO(data), "rb") as reader:
+            channels = reader.getnchannels()
+            sample_width = reader.getsampwidth()
+            sample_rate = reader.getframerate()
+            frame_count = reader.getnframes()
+            compression_type = reader.getcomptype()
+            compression_name = reader.getcompname()
+            duration_seconds = frame_count / sample_rate if sample_rate > 0 else 0
+            if end_seconds > duration_seconds + 0.002:
+                raise WavAnalysisError("WAV analysis range exceeds audio duration")
+            start_frame = min(frame_count, max(0, int(start_seconds * sample_rate)))
+            end_frame = min(frame_count, max(start_frame + 1, ceil(end_seconds * sample_rate)))
+            reader.setpos(start_frame)
+            frames = reader.readframes(end_frame - start_frame)
+    except (EOFError, wave.Error) as exc:
+        raise WavAnalysisError("Invalid WAV file") from exc
+
+    buffer = BytesIO()
+    try:
+        with wave.open(buffer, "wb") as writer:
+            writer.setnchannels(channels)
+            writer.setsampwidth(sample_width)
+            writer.setframerate(sample_rate)
+            writer.setcomptype(compression_type, compression_name)
+            writer.writeframes(frames)
+    except wave.Error as exc:
+        raise WavAnalysisError("Could not create WAV analysis range") from exc
+    return buffer.getvalue()
 
 
 def _waveform_peaks(frames: bytes, sample_width: int, channels: int) -> list[float]:
