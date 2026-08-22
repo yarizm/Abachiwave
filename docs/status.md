@@ -99,6 +99,7 @@ scripts/smoke_mvp.py             ok
 npm run test:e2e                 25 passed, 1 desktop-only skip
 Basic Pitch faults               5 scenarios passed
 compressed decode (ffmpeg)       mp3/m4a/flac/ogg all passed
+GitHub Actions CI                5 jobs green
 ```
 
 PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `basic-pitch` sidecar 均通过
@@ -116,9 +117,17 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 48 kHz、双声道、16-bit PCM WAV，派生 `source_checksum` 指回源文件，原始文件下载后与上传字节
 完全一致，确认标准化不覆盖原件。
 
+本批工作首次进入 GitHub Actions 时暴露两个本地环境测不出的问题，均已修复并在 CI 复验：
+
+- `extract_midi_from_audio_job` 迁到 `arq:audio-midi` 专用队列后，integration job 仍只启动默认队列
+  worker，smoke 的转录任务一直停在 `queued` 直到超时。本地 Compose 恰好有 `audio-midi-worker`
+  服务，因此掩盖了这个缺口。
+- `npm audit --audit-level=high` 报出 postcss 与 sharp 通告。两者均通过 `overrides` 收敛，未升级
+  Next 大版本。
+
 ## 6. 当前工作树与风险
 
-- 分支为 `main`，工作树干净，尚未推送 `origin/main`。
+- 分支为 `main`，工作树干净，已推送 `origin/main`；CI 五个 job 全绿。
 - 原先的大批未提交修改已按依赖序拆成 7 个提交：gitignore、数据层、Provider/Worker、API/编排、
   前端、评测框架、文档。每个提交是一个独立审查单元。
 - 当前 migration 只有一个 head：`202608100001`。
