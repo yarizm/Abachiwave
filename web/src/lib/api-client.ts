@@ -28,6 +28,11 @@ export async function fetchJson<T>(url: string, label: string, init?: RequestIni
   return (await response.json()) as T;
 }
 
+export async function fetchNoContent(url: string, label: string, init?: RequestInit): Promise<void> {
+  const response = await fetch(url, init);
+  await ensureApiResponse(response, label);
+}
+
 export async function fetchBlob(url: string, label: string, init?: RequestInit): Promise<Blob> {
   const response = await fetch(url, init);
   await ensureApiResponse(response, label);

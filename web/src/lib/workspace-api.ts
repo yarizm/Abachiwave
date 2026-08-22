@@ -9,6 +9,8 @@ import {
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
+  AudioDerivative,
+  AudioMarker,
   AudioUpload,
   AssetTree,
   ChordProgressionVersion,
@@ -20,9 +22,13 @@ import {
   ProjectEvent,
   ProjectHandoff,
   ProjectReview,
+  ReferenceAnalysis,
   RevisionRequest,
   arrangementsEndpoint,
   assetTreeEndpoint,
+  audioDerivativesEndpoint,
+  audioMarkersEndpoint,
+  audioAnalysesEndpoint,
   audioUploadsEndpoint,
   chordsEndpoint,
   demosEndpoint,
@@ -36,6 +42,8 @@ import {
   projectRunsEndpoint,
   revisionsEndpoint,
   sortArrangementVersions,
+  sortAudioDerivatives,
+  sortAudioMarkers,
   sortAudioUploads,
   sortChordVersions,
   sortDemoVersions,
@@ -45,6 +53,7 @@ import {
   sortMidiAssets,
   sortProjectComments,
   sortProjectEvents,
+  sortReferenceAnalyses,
   sortRevisionRequests,
 } from "@/lib/composition";
 import { Project, projectDetailEndpoint } from "@/lib/projects";
@@ -74,6 +83,9 @@ export type WorkspaceSnapshot = {
   projectHandoff: ProjectHandoff;
   projectReview: ProjectReview;
   audioUploads: AudioUpload[];
+  audioDerivatives: AudioDerivative[];
+  audioMarkers: AudioMarker[];
+  referenceAnalyses: ReferenceAnalysis[];
   providerProfiles: ProviderCapability[];
   candidates: GenerationCandidate[];
   optionalErrors: {
@@ -91,6 +103,52 @@ export async function loadWorkspaceSnapshot(
   apiBaseUrl: string,
   projectId: string,
 ): Promise<WorkspaceSnapshot> {
+  const audioUploadsPromise = fetchJson<AudioUpload[]>(
+    audioUploadsEndpoint(apiBaseUrl, projectId),
+    "Audio upload list",
+  );
+  const audioDerivativesPromise = audioUploadsPromise.then(async (uploads) =>
+    sortAudioDerivatives(
+      (
+        await Promise.all(
+          uploads.map((upload) =>
+            fetchJson<AudioDerivative[]>(
+              audioDerivativesEndpoint(apiBaseUrl, projectId, upload.id),
+              "Audio derivative list",
+            ),
+          ),
+        )
+      ).flat(),
+    ),
+  );
+  const audioMarkersPromise = audioUploadsPromise.then(async (uploads) =>
+    sortAudioMarkers(
+      (
+        await Promise.all(
+          uploads.map((upload) =>
+            fetchJson<AudioMarker[]>(
+              audioMarkersEndpoint(apiBaseUrl, projectId, upload.id),
+              "Audio marker list",
+            ),
+          ),
+        )
+      ).flat(),
+    ),
+  );
+  const referenceAnalysesPromise = audioUploadsPromise.then(async (uploads) =>
+    sortReferenceAnalyses(
+      (
+        await Promise.all(
+          uploads.map((upload) =>
+            fetchJson<ReferenceAnalysis[]>(
+              audioAnalysesEndpoint(apiBaseUrl, projectId, upload.id),
+              "Reference analysis list",
+            ),
+          ),
+        )
+      ).flat(),
+    ),
+  );
   const corePromise = Promise.all([
     fetchJson<Project>(projectDetailEndpoint(apiBaseUrl, projectId), "Project"),
     fetchJson<IdeaIntake | null>(latestIntakeEndpoint(apiBaseUrl, projectId), "Latest intake"),
@@ -111,7 +169,10 @@ export async function loadWorkspaceSnapshot(
     fetchJson<ProjectEvent[]>(projectEventsEndpoint(apiBaseUrl, projectId), "Project event list"),
     fetchJson<ProjectHandoff>(projectHandoffEndpoint(apiBaseUrl, projectId), "Project handoff"),
     fetchJson<ProjectReview>(projectReviewEndpoint(apiBaseUrl, projectId), "Project review"),
-    fetchJson<AudioUpload[]>(audioUploadsEndpoint(apiBaseUrl, projectId), "Audio upload list"),
+    audioUploadsPromise,
+    audioDerivativesPromise,
+    audioMarkersPromise,
+    referenceAnalysesPromise,
   ]);
   const optionalPromise = loadOptionalWorkspaceData(
     fetchJson<ProviderCapability[]>(providerCapabilitiesEndpoint(apiBaseUrl), "Provider list"),
@@ -135,6 +196,9 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads,
+    audioDerivatives,
+    audioMarkers,
+    referenceAnalyses,
   ], optional] = await Promise.all([corePromise, optionalPromise]);
 
   return {
@@ -155,6 +219,9 @@ export async function loadWorkspaceSnapshot(
     projectHandoff,
     projectReview,
     audioUploads: sortAudioUploads(audioUploads),
+    audioDerivatives,
+    audioMarkers,
+    referenceAnalyses,
     providerProfiles: optional.providerProfiles,
     candidates: optional.candidates,
     optionalErrors: optional.optionalErrors,

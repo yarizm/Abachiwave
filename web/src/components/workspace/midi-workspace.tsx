@@ -446,6 +446,16 @@ export function MidiWorkspace({
                   <p className="meta">
                     {text(asset.kind)} v{asset.version_number} · {asset.note_events.length} {t("notes")} · {formatBytes(asset.size_bytes)}
                   </p>
+                  {asset.source_audio_upload_id ? (
+                    <p className="meta">
+                      {asset.source_reference_analysis_id
+                        ? t("Linked reference analysis")
+                        : t("Direct audio extraction")}
+                      {sourceManifestString(asset, "provider_name")
+                        ? ` · ${sourceManifestString(asset, "provider_name")} ${sourceManifestString(asset, "provider_version") ?? ""}`
+                        : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <DownloadButton filename={asset.filename} url={midiAssetDownloadEndpoint(apiBaseUrl, projectId, asset.id)} />
               </div>
@@ -455,6 +465,11 @@ export function MidiWorkspace({
       ) : null}
     </section>
   );
+}
+
+function sourceManifestString(asset: MidiAssetVersion, key: string): string | null {
+  const value = asset.source_provider_manifest[key];
+  return typeof value === "string" && value ? value : null;
 }
 
 function PianoRoll({

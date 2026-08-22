@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ApiRequestError, fetchJson } from "./api-client";
+import { ApiRequestError, fetchJson, fetchNoContent } from "./api-client";
 
 test("fetchJson returns typed JSON for successful responses", async () => {
   const originalFetch = globalThis.fetch;
@@ -9,6 +9,18 @@ test("fetchJson returns typed JSON for successful responses", async () => {
   try {
     const result = await fetchJson<{ status: string }>("http://example.test/health", "Health");
     assert.deepEqual(result, { status: "ok" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchNoContent accepts successful 204 responses without parsing JSON", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 204 });
+  try {
+    await fetchNoContent("http://example.test/audio-markers/marker-1", "Marker delete", {
+      method: "DELETE",
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

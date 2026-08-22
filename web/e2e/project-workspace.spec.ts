@@ -367,7 +367,7 @@ test.describe("project workspace", () => {
       );
 
       const audioPanel = page.locator("section[aria-labelledby='audio-title']");
-      await audioPanel.getByLabel("WAV file").setInputFiles({
+      await audioPanel.getByLabel("Audio file").setInputFiles({
         name: "browser-humming.wav",
         mimeType: "audio/wav",
         buffer: buildWavBuffer(),
@@ -378,7 +378,7 @@ test.describe("project workspace", () => {
         .fill("Browser humming fixture");
       await runApiAction(
         page,
-        audioPanel.getByRole("button", { name: "Upload WAV" }),
+        audioPanel.getByRole("button", { name: "Upload audio" }),
         "POST",
         `/api/v1/projects/${browserProjectId}/audio-uploads`,
         201,

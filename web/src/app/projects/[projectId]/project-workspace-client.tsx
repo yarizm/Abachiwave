@@ -16,7 +16,11 @@ import {
   makeCommentTargetValue,
   parseCommentTarget,
 } from "@/components/workspace/collaboration-workspace";
-import type { AudioUploadUpdatePayload } from "@/components/workspace/audio-workspace";
+import type {
+  AudioMarkerCreatePayload,
+  AudioMarkerUpdatePayload,
+  AudioUploadUpdatePayload,
+} from "@/components/workspace/audio-workspace";
 import {
   DeliveryWorkspace,
   emptyArrangementPlan,
@@ -29,7 +33,7 @@ import {
   SongSpecWorkspace,
 } from "@/components/workspace/song-spec-workspace";
 import { useLocale } from "@/i18n/locale-provider";
-import { fetchJson } from "@/lib/api-client";
+import { fetchJson, fetchNoContent } from "@/lib/api-client";
 import {
   CandidateGeneratePayload,
   CandidateSelection,
@@ -46,6 +50,10 @@ import {
 
 import {
   ArrangementPlan,
+  AudioAnalysisRange,
+  ReferenceAnalysisApplyField,
+  ReferenceAnalysisApplyResult,
+  AudioMarker,
   AudioUpload,
   AudioUploadKind,
   ChordPreview,
@@ -64,6 +72,10 @@ import {
   RestoreAssetType,
   VersionAssetType,
   VersionDiff,
+  audioDerivativesEndpoint,
+  audioAnalyzeEndpoint,
+  audioMarkerEndpoint,
+  audioMarkersEndpoint,
   audioExtractMidiEndpoint,
   audioUploadEndpoint,
   audioUploadsEndpoint,
@@ -89,11 +101,14 @@ import {
   projectCommentEndpoint,
   projectCommentsEndpoint,
   revisionApplyEndpoint,
+  referenceAnalysisApplyEndpoint,
   revisionRejectEndpoint,
   revisionsEndpoint,
   sortArrangementVersions,
+  sortAudioDerivatives,
   sortAudioUploads,
   sortChordVersions,
+  sortAudioMarkers,
   sortDemoVersions,
   sortExportBundles,
   sortGenerationRuns,
@@ -101,6 +116,7 @@ import {
   sortMidiAssets,
   sortProjectComments,
   sortProjectEvents,
+  sortReferenceAnalyses,
   sortRevisionRequests,
   taskCancelEndpoint,
   taskRetryEndpoint,
@@ -108,6 +124,8 @@ import {
   validateAudioUploadFile,
   validateAudioUploadNotes,
   validateChordSections,
+  validateAudioMarkerLabel,
+  validateAudioMarkerPosition,
   validateCommentBody,
   validateLyricSections,
   validateRevisionFeedback,
@@ -217,6 +235,10 @@ export default function ProjectWorkspaceClient() {
     projectReview,
     audioUploads,
     setAudioUploads,
+    audioDerivatives,
+    audioMarkers,
+    setAudioMarkers,
+    referenceAnalyses,
     providerProfiles,
     candidates,
     optionalErrors,
@@ -259,12 +281,27 @@ export default function ProjectWorkspaceClient() {
   const sortedComments = useMemo(() => sortProjectComments(projectComments), [projectComments]);
   const sortedProjectEvents = useMemo(() => sortProjectEvents(projectEvents), [projectEvents]);
   const sortedAudioUploads = useMemo(() => sortAudioUploads(audioUploads), [audioUploads]);
+  const sortedAudioDerivatives = useMemo(
+    () => sortAudioDerivatives(audioDerivatives),
+    [audioDerivatives],
+  );
+  const sortedAudioMarkers = useMemo(() => sortAudioMarkers(audioMarkers), [audioMarkers]);
+  const sortedReferenceAnalyses = useMemo(
+    () => sortReferenceAnalyses(referenceAnalyses),
+    [referenceAnalyses],
+  );
   const demoRuns = useMemo(
     () => sortedRuns.filter((run) => run.run_type === "demo_generation"),
     [sortedRuns],
   );
   const audioRuns = useMemo(
-    () => sortedRuns.filter((run) => run.run_type === "audio_to_midi"),
+    () =>
+      sortedRuns.filter(
+        (run) =>
+          run.run_type === "audio_to_midi" ||
+          run.run_type === "audio_derivative" ||
+          run.run_type === "reference_analysis",
+      ),
     [sortedRuns],
   );
   const textRuns = useMemo(() => textGenerationRuns(sortedRuns), [sortedRuns]);
@@ -960,7 +997,138 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
-  async function handleExtractAudioMidi(audioUploadId: string) {
+  async function handleCreateAudioMarker(
+    audioUploadId: string,
+    payload: AudioMarkerCreatePayload,
+  ): Promise<void> {
+    const upload = audioUploads.find((item) => item.id === audioUploadId);
+    const validationError =
+      validateAudioMarkerLabel(payload.label) ??
+      validateAudioMarkerPosition(payload.position_seconds, upload?.duration_seconds ?? -1);
+    if (!upload || validationError) {
+      const message = validationError ?? "Audio upload not found.";
+      setError(text(message));
+      throw new Error(message);
+    }
+
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const marker = await fetchJson<AudioMarker>(
+        audioMarkersEndpoint(apiBaseUrl, projectId, audioUploadId),
+        "Audio marker create",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      setAudioMarkers((current) => sortAudioMarkers([...current, marker]));
+      showToast(t("Audio marker added"));
+      await loadWorkspace();
+    } catch (markerError) {
+      handleApiError(markerError, "Failed to add audio marker");
+      throw markerError;
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleUpdateAudioMarker(
+    markerId: string,
+    payload: AudioMarkerUpdatePayload,
+  ): Promise<void> {
+    const sourceMarker = audioMarkers.find((marker) => marker.id === markerId);
+    const upload = audioUploads.find((item) => item.id === sourceMarker?.audio_upload_id);
+    const validationError =
+      payload.label === undefined ? null : validateAudioMarkerLabel(payload.label);
+    const positionError =
+      payload.position_seconds === undefined
+        ? null
+        : validateAudioMarkerPosition(payload.position_seconds, upload?.duration_seconds ?? -1);
+    if (!sourceMarker || !upload || validationError || positionError) {
+      const message = validationError ?? positionError ?? "Audio marker not found.";
+      setError(text(message));
+      throw new Error(message);
+    }
+
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const marker = await fetchJson<AudioMarker>(
+        audioMarkerEndpoint(apiBaseUrl, projectId, markerId),
+        "Audio marker update",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      setAudioMarkers((current) =>
+        sortAudioMarkers(current.map((item) => (item.id === marker.id ? marker : item))),
+      );
+      showToast(t("Audio marker saved"));
+      await loadWorkspace();
+    } catch (markerError) {
+      handleApiError(markerError, "Failed to update audio marker");
+      throw markerError;
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleDeleteAudioMarker(markerId: string): Promise<void> {
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      await fetchNoContent(
+        audioMarkerEndpoint(apiBaseUrl, projectId, markerId),
+        "Audio marker delete",
+        { method: "DELETE" },
+      );
+      setAudioMarkers((current) => current.filter((marker) => marker.id !== markerId));
+      showToast(t("Audio marker deleted"));
+      await loadWorkspace();
+    } catch (markerError) {
+      handleApiError(markerError, "Failed to delete audio marker");
+      throw markerError;
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleCreateAudioDerivative(audioUploadId: string) {
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const run = await fetchJson<GenerationRun>(
+        audioDerivativesEndpoint(apiBaseUrl, projectId, audioUploadId),
+        "Audio derivative",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "pcm_wav" }),
+        },
+      );
+      setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
+      showToast(t("PCM WAV normalization queued"));
+      await loadWorkspace();
+    } catch (derivativeError) {
+      handleApiError(derivativeError, "Failed to normalize audio");
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleExtractAudioMidi(
+    audioUploadId: string,
+    analysisRange: AudioAnalysisRange | null,
+    referenceAnalysisId: string | null,
+  ) {
     if (!approvedVersion) {
       setError(t("Approve a SongSpec before extracting melody MIDI."));
       return;
@@ -975,13 +1143,91 @@ export default function ProjectWorkspaceClient() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ song_spec_id: approvedVersion.id, target_kind: "melody" }),
+          body: JSON.stringify({
+            song_spec_id: approvedVersion.id,
+            target_kind: "melody",
+            ...(analysisRange ? { analysis_range: analysisRange } : {}),
+            ...(referenceAnalysisId
+              ? { reference_analysis_id: referenceAnalysisId }
+              : {}),
+          }),
         },
       );
       setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
       await loadWorkspace();
     } catch (extractError) {
       handleApiError(extractError, "Failed to extract melody MIDI");
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleAnalyzeReference(
+    audioUploadId: string,
+    analysisRange: AudioAnalysisRange | null,
+  ) {
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const run = await fetchJson<GenerationRun>(
+        audioAnalyzeEndpoint(apiBaseUrl, projectId, audioUploadId),
+        "Reference audio analysis",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(analysisRange ? { analysis_range: analysisRange } : {}),
+        },
+      );
+      setGenerationRuns((current) => sortGenerationRuns([run, ...current]));
+      showToast(t("Reference analysis queued"));
+      await loadWorkspace();
+    } catch (analysisError) {
+      handleApiError(analysisError, "Failed to analyze reference audio");
+    } finally {
+      pendingActions.end("audio");
+    }
+  }
+
+  async function handleApplyReferenceAnalysis(
+    analysisId: string,
+    fields: ReferenceAnalysisApplyField[],
+    confirm: boolean,
+  ): Promise<ReferenceAnalysisApplyResult> {
+    if (!approvedVersion) {
+      const message = t("Approve a SongSpec before applying reference analysis.");
+      setError(message);
+      throw new Error(message);
+    }
+    pendingActions.begin("audio");
+    setError(null);
+    setErrorHint(null);
+    try {
+      const result = await fetchJson<ReferenceAnalysisApplyResult>(
+        referenceAnalysisApplyEndpoint(apiBaseUrl, projectId, analysisId),
+        "Reference analysis apply",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            song_spec_id: approvedVersion.id,
+            fields,
+            confirm,
+          }),
+        },
+      );
+      if (result.applied) {
+        showToast(
+          t("Reference fields applied as SongSpec v{version}", {
+            version: result.new_song_spec_version ?? "—",
+          }),
+        );
+        await loadWorkspace();
+      }
+      return result;
+    } catch (applyError) {
+      handleApiError(applyError, "Failed to apply reference analysis");
+      throw applyError;
     } finally {
       pendingActions.end("audio");
     }
@@ -1433,17 +1679,26 @@ export default function ProjectWorkspaceClient() {
 
       <div id="composition-panel" className="asset-grid workspace-anchor" tabIndex={-1}>
         <AudioWorkspace
+          analyses={sortedReferenceAnalyses}
           approvedSongSpecId={approvedVersion?.id ?? null}
+          derivatives={sortedAudioDerivatives}
           file={audioUploadFile}
           isSaving={pendingActions.isPending("audio", "tasks")}
           kind={audioUploadKind}
           notes={audioUploadNotes}
+          markers={sortedAudioMarkers}
+          onAnalyze={handleAnalyzeReference}
+          onApplyAnalysis={handleApplyReferenceAnalysis}
           onCancel={handleCancelRun}
+          onCreateDerivative={handleCreateAudioDerivative}
+          onCreateMarker={handleCreateAudioMarker}
+          onDeleteMarker={handleDeleteAudioMarker}
           onExtract={handleExtractAudioMidi}
           onFileChange={setAudioUploadFile}
           onKindChange={setAudioUploadKind}
           onNotesChange={setAudioUploadNotes}
           onUpdateUpload={handleUpdateAudioUpload}
+          onUpdateMarker={handleUpdateAudioMarker}
           onUpload={handleAudioUploadSubmit}
           projectId={projectId}
           runs={audioRuns}

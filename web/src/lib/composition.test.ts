@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  audioDerivativeDownloadEndpoint,
+  audioDerivativesEndpoint,
+  audioAnalysesEndpoint,
+  audioAnalyzeEndpoint,
   audioExtractMidiEndpoint,
+  audioMarkerEndpoint,
+  audioMarkersEndpoint,
   audioUploadStatusActionLabel,
   audioUploadDownloadEndpoint,
   audioUploadEndpoint,
@@ -18,6 +24,7 @@ import {
   canGenerateArrangement,
   canGenerateComposition,
   canRetryRun,
+  createAudioAnalysisRange,
   chordPreviewEndpoint,
   chordTransposeEndpoint,
   chordVersionEndpoint,
@@ -30,6 +37,7 @@ import {
   exportDownloadEndpoint,
   exportEndpoint,
   exportsEndpoint,
+  formatAudioPosition,
   isRunActive,
   latestApprovedSongSpec,
   lyricsEndpoint,
@@ -50,8 +58,12 @@ import {
   revisionApplyEndpoint,
   revisionEndpoint,
   revisionRejectEndpoint,
+  referenceAnalysisEndpoint,
+  referenceAnalysisApplyEndpoint,
   revisionsEndpoint,
   sortArrangementVersions,
+  sortAudioDerivatives,
+  sortAudioMarkers,
   sortAudioUploads,
   sortChordVersions,
   sortDemoVersions,
@@ -62,10 +74,13 @@ import {
   sortProjectComments,
   sortProjectEvents,
   sortRevisionRequests,
+  sortReferenceAnalyses,
   taskCancelEndpoint,
   taskEndpoint,
   taskRetryEndpoint,
   validateArrangementPlan,
+  validateAudioMarkerLabel,
+  validateAudioMarkerPosition,
   validateAudioUploadFile,
   validateAudioUploadNotes,
   validateChordSections,
@@ -76,6 +91,9 @@ import {
   versionRestoreEndpoint,
   type ArrangementPlan,
   type ArrangementPlanVersion,
+  type AudioDerivative,
+  type AudioMarker,
+  type ReferenceAnalysis,
   type AudioUpload,
   type AudioDemoVersion,
   type AssetTree,
@@ -213,6 +231,8 @@ function midi(versionNumber: number, createdAt: string): MidiAssetVersion {
     time_signature_map: [{ beat: 0, numerator: 4, denominator: 4 }],
     source_revision_request_id: null,
     source_audio_upload_id: null,
+    source_reference_analysis_id: null,
+    source_provider_manifest: {},
     filename: `melody-v${versionNumber}.mid`,
     content_type: "audio/midi",
     size_bytes: 128,
@@ -318,6 +338,7 @@ function audioUpload(versionNumber: number, createdAt: string): AudioUpload {
     status: "available",
     filename: `humming-${versionNumber}.wav`,
     content_type: "audio/wav",
+    format: "wav",
     size_bytes: 1024,
     checksum: "checksum",
     duration_seconds: 1,
@@ -327,6 +348,89 @@ function audioUpload(versionNumber: number, createdAt: string): AudioUpload {
     notes: null,
     created_at: createdAt,
     updated_at: createdAt,
+  };
+}
+
+function audioDerivative(id: string, createdAt: string): AudioDerivative {
+  return {
+    id,
+    project_id: "project-1",
+    audio_upload_id: "audio-1",
+    kind: "pcm_wav",
+    filename: id + ".wav",
+    content_type: "audio/wav",
+    format: "wav",
+    sample_rate: 48000,
+    channels: 2,
+    duration_seconds: 1,
+    size_bytes: 128,
+    checksum: id + "-checksum",
+    source_checksum: "source-checksum",
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
+function audioMarker(
+  id: string,
+  audioUploadId: string,
+  positionSeconds: number,
+): AudioMarker {
+  return {
+    id,
+    project_id: "project-1",
+    audio_upload_id: audioUploadId,
+    position_seconds: positionSeconds,
+    label: `Marker ${id}`,
+    section_id: null,
+    notes: null,
+    created_at: "2026-08-08T00:00:00Z",
+    updated_at: "2026-08-08T00:00:00Z",
+  };
+}
+
+function referenceAnalysis(
+  id: string,
+  audioUploadId: string,
+  versionNumber: number,
+): ReferenceAnalysis {
+  return {
+    id,
+    project_id: "project-1",
+    audio_upload_id: audioUploadId,
+    audio_derivative_id: null,
+    run_id: `run-${id}`,
+    version_number: versionNumber,
+    source_checksum: "source-checksum",
+    analysis_range: { mode: "full", start_seconds: 0, end_seconds: 1 },
+    tempo_bpm: 120,
+    beat_grid: [0, 0.5],
+    time_signature: { value: "4/4", confidence: 0.5 },
+    key_candidate: { tonic: "A", mode: "major", value: "A major", confidence: 0.6 },
+    pitch_range: {
+      low_midi: 57,
+      high_midi: 69,
+      low_note: "A3",
+      high_note: "A4",
+      confidence: 0.6,
+    },
+    loudness: {
+      integrated_dbfs: -12,
+      peak_dbfs: -1,
+      dynamic_range_db: 8,
+      curve: [],
+      confidence: 0.8,
+    },
+    structure_sections: [],
+    chord_candidates: [],
+    instrument_tags: [],
+    energy_curve: [],
+    production_features: [],
+    confidence: { overall: 0.6 },
+    provider_name: "local_deterministic_reference_analysis",
+    provider_version: "1.0",
+    provider_params: {},
+    created_at: "2026-08-09T00:00:00Z",
   };
 }
 
@@ -478,8 +582,40 @@ test("composition endpoints build nested project URLs", () => {
     "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/download",
   );
   assert.equal(
+    audioDerivativesEndpoint("http://localhost:8000", "p1", "a1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/derivatives",
+  );
+  assert.equal(
+    audioDerivativeDownloadEndpoint("http://localhost:8000", "p1", "a1", "d1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/derivatives/d1/download",
+  );
+  assert.equal(
+    audioMarkersEndpoint("http://localhost:8000", "p1", "a1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/markers",
+  );
+  assert.equal(
+    audioMarkerEndpoint("http://localhost:8000", "p1", "mk1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-markers/mk1",
+  );
+  assert.equal(
     audioExtractMidiEndpoint("http://localhost:8000", "p1", "a1"),
     "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/extract-midi",
+  );
+  assert.equal(
+    audioAnalyzeEndpoint("http://localhost:8000", "p1", "a1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/analyze",
+  );
+  assert.equal(
+    audioAnalysesEndpoint("http://localhost:8000", "p1", "a1"),
+    "http://localhost:8000/api/v1/projects/p1/audio-uploads/a1/analyses",
+  );
+  assert.equal(
+    referenceAnalysisEndpoint("http://localhost:8000", "p1", "ra1"),
+    "http://localhost:8000/api/v1/projects/p1/reference-analyses/ra1",
+  );
+  assert.equal(
+    referenceAnalysisApplyEndpoint("http://localhost:8000", "p1", "ra1"),
+    "http://localhost:8000/api/v1/projects/p1/reference-analyses/ra1/apply",
   );
   assert.equal(
     arrangementGenerateEndpoint("http://localhost:8000", "p1"),
@@ -599,6 +735,29 @@ test("composition version sorters put newest first", () => {
     ["audio-2", "audio-1"],
   );
   assert.deepEqual(
+    sortAudioDerivatives([
+      audioDerivative("derivative-1", "2026-07-08T00:00:00Z"),
+      audioDerivative("derivative-2", "2026-07-08T00:01:00Z"),
+    ]).map((item) => item.id),
+    ["derivative-2", "derivative-1"],
+  );
+  assert.deepEqual(
+    sortAudioMarkers([
+      audioMarker("marker-c", "audio-2", 1),
+      audioMarker("marker-b", "audio-1", 4),
+      audioMarker("marker-a", "audio-1", 2),
+    ]).map((item) => item.id),
+    ["marker-a", "marker-b", "marker-c"],
+  );
+  assert.deepEqual(
+    sortReferenceAnalyses([
+      referenceAnalysis("analysis-1", "audio-1", 1),
+      referenceAnalysis("analysis-3", "audio-2", 1),
+      referenceAnalysis("analysis-2", "audio-1", 2),
+    ]).map((item) => item.id),
+    ["analysis-2", "analysis-1", "analysis-3"],
+  );
+  assert.deepEqual(
     sortExportBundles([
       exportBundle(1, "2026-07-08T00:00:00Z"),
       exportBundle(2, "2026-07-08T00:01:00Z"),
@@ -713,15 +872,24 @@ test("runProgressHint describes active phases and returns null for terminal stat
   assert.equal(runProgressHint("cancelled"), null);
 });
 
-test("audio upload validators require WAV files", () => {
-  assert.equal(validateAudioUploadFile(null), "Choose a WAV file to upload.");
+test("audio upload validators accept supported formats and reject mismatches", () => {
+  assert.equal(validateAudioUploadFile(null), "Choose an audio file to upload.");
+  for (const [filename, contentType] of [
+    ["humming.wav", "audio/wav"],
+    ["reference.mp3", "audio/mpeg"],
+    ["reference.m4a", "audio/mp4"],
+    ["reference.flac", "audio/flac"],
+    ["reference.ogg", "audio/ogg"],
+  ]) {
+    assert.equal(validateAudioUploadFile(new File(["data"], filename, { type: contentType })), null);
+  }
   assert.equal(
-    validateAudioUploadFile(new File(["data"], "humming.mp3", { type: "audio/mpeg" })),
-    "Only WAV uploads are supported.",
+    validateAudioUploadFile(new File(["data"], "reference.aac", { type: "audio/aac" })),
+    "Use a WAV, MP3, M4A, FLAC, or OGG audio file.",
   );
   assert.equal(
-    validateAudioUploadFile(new File(["data"], "humming.wav", { type: "audio/wav" })),
-    null,
+    validateAudioUploadFile(new File(["data"], "reference.mp3", { type: "audio/flac" })),
+    "The audio filename and media type do not match.",
   );
 });
 
@@ -733,6 +901,45 @@ test("audio upload helpers validate notes and status actions", () => {
   );
   assert.equal(audioUploadStatusActionLabel("available"), "Archive upload");
   assert.equal(audioUploadStatusActionLabel("archived"), "Restore upload");
+});
+
+test("audio analysis range helpers normalize drag direction and minimum duration", () => {
+  assert.deepEqual(createAudioAnalysisRange(8, 2, 10), {
+    start_seconds: 2,
+    end_seconds: 8,
+  });
+  assert.deepEqual(createAudioAnalysisRange(9.98, 9.99, 10), {
+    start_seconds: 9.9,
+    end_seconds: 10,
+  });
+  assert.deepEqual(createAudioAnalysisRange(-2, 20, 10), {
+    start_seconds: 0,
+    end_seconds: 10,
+  });
+  assert.equal(createAudioAnalysisRange(0, 1, 0), null);
+  assert.equal(formatAudioPosition(65.25), "1:05.25");
+});
+
+test("audio marker validators enforce labels and duration bounds", () => {
+  assert.equal(validateAudioMarkerLabel("  "), "Marker label is required.");
+  assert.equal(
+    validateAudioMarkerLabel("x".repeat(121)),
+    "Marker label must be 120 characters or fewer.",
+  );
+  assert.equal(validateAudioMarkerLabel("Chorus lift"), null);
+  assert.equal(
+    validateAudioMarkerPosition(Number.NaN, 12),
+    "Marker position must be zero or greater.",
+  );
+  assert.equal(
+    validateAudioMarkerPosition(-0.01, 12),
+    "Marker position must be zero or greater.",
+  );
+  assert.equal(
+    validateAudioMarkerPosition(12.01, 12),
+    "Marker position must be within the audio duration.",
+  );
+  assert.equal(validateAudioMarkerPosition(12, 12), null);
 });
 
 test("revision helpers validate feedback and apply state", () => {

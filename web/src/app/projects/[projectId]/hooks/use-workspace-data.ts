@@ -9,6 +9,8 @@ import type { GenerationCandidate, ProviderCapability } from "@/lib/ai-generatio
 import {
   ArrangementPlanVersion,
   AudioDemoVersion,
+  AudioDerivative,
+  AudioMarker,
   AudioUpload,
   AssetTree,
   ChordProgressionVersion,
@@ -20,6 +22,7 @@ import {
   ProjectEvent,
   ProjectHandoff,
   ProjectReview,
+  ReferenceAnalysis,
   RevisionRequest,
 } from "@/lib/composition";
 import { Project } from "@/lib/projects";
@@ -45,6 +48,9 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
   const [projectHandoff, setProjectHandoff] = useState<ProjectHandoff | null>(null);
   const [projectReview, setProjectReview] = useState<ProjectReview | null>(null);
   const [audioUploads, setAudioUploads] = useState<AudioUpload[]>([]);
+  const [audioDerivatives, setAudioDerivatives] = useState<AudioDerivative[]>([]);
+  const [audioMarkers, setAudioMarkers] = useState<AudioMarker[]>([]);
+  const [referenceAnalyses, setReferenceAnalyses] = useState<ReferenceAnalysis[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<ProviderCapability[]>([]);
   const [candidates, setCandidates] = useState<GenerationCandidate[]>([]);
   const [optionalErrors, setOptionalErrors] = useState({
@@ -76,6 +82,9 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
       setProjectHandoff(snapshot.projectHandoff);
       setProjectReview(snapshot.projectReview);
       setAudioUploads(snapshot.audioUploads);
+      setAudioDerivatives(snapshot.audioDerivatives);
+      setAudioMarkers(snapshot.audioMarkers);
+      setReferenceAnalyses(snapshot.referenceAnalyses);
       setProviderProfiles(snapshot.providerProfiles);
       setCandidates(snapshot.candidates);
       setOptionalErrors(snapshot.optionalErrors);
@@ -139,6 +148,12 @@ export function useWorkspaceData(apiBaseUrl: string, projectId: string) {
     setProjectReview,
     audioUploads,
     setAudioUploads,
+    audioDerivatives,
+    setAudioDerivatives,
+    audioMarkers,
+    setAudioMarkers,
+    referenceAnalyses,
+    setReferenceAnalyses,
     providerProfiles,
     setProviderProfiles,
     candidates,

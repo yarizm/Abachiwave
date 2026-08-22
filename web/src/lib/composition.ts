@@ -11,13 +11,24 @@ export type MidiTransformOperation =
   | "scale_snap";
 export type ExportBundleStatus = "ready" | "failed";
 export type GenerationRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type GenerationRunType = "demo_generation" | "audio_to_midi" | "text_generation";
+export type GenerationRunType =
+  | "demo_generation"
+  | "audio_to_midi"
+  | "audio_derivative"
+  | "reference_analysis"
+  | "text_generation";
 export type RevisionRequestStatus = "planned" | "applied" | "rejected";
 export type RevisionTaskTarget = "lyrics" | "midi_melody" | "arrangement";
 export type VersionAssetType = "lyrics" | "midi_melody" | "arrangement" | "demo";
 export type RestoreAssetType = "lyrics" | "midi_melody" | "arrangement";
 export type AudioUploadKind = "humming" | "reference" | "scratch" | "other";
-export type AudioUploadStatus = "available" | "archived";
+export type AudioDerivativeKind = "pcm_wav";
+export type AudioSourceFormat = "wav" | "mp3" | "m4a" | "flac" | "ogg";
+export type AudioUploadStatus = "processing" | "available" | "failed" | "archived";
+export type AudioAnalysisRange = {
+  start_seconds: number;
+  end_seconds: number;
+};
 export type ProjectReviewStatus = "ready" | "needs_work" | "blocked";
 export type ProjectReviewItemStatus = "pass" | "warning" | "fail";
 export type ProjectCommentStatus = "open" | "resolved";
@@ -193,6 +204,8 @@ export type MidiAssetVersion = {
   time_signature_map: MidiTimeSignatureEvent[];
   source_revision_request_id: string | null;
   source_audio_upload_id: string | null;
+  source_reference_analysis_id: string | null;
+  source_provider_manifest: Record<string, unknown>;
   filename: string;
   content_type: string;
   size_bytes: number;
@@ -337,15 +350,119 @@ export type AudioUpload = {
   status: AudioUploadStatus;
   filename: string;
   content_type: string;
+  format: AudioSourceFormat;
   size_bytes: number;
   checksum: string;
-  duration_seconds: number;
-  sample_rate: number;
-  channels: number;
-  waveform_peaks: number[];
+  duration_seconds: number | null;
+  sample_rate: number | null;
+  channels: number | null;
+  waveform_peaks: number[] | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AudioDerivative = {
+  id: string;
+  project_id: string;
+  audio_upload_id: string;
+  kind: AudioDerivativeKind;
+  filename: string;
+  content_type: string;
+  format: string;
+  sample_rate: number;
+  channels: number;
+  duration_seconds: number;
+  size_bytes: number;
+  checksum: string;
+  source_checksum: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AudioMarker = {
+  id: string;
+  project_id: string;
+  audio_upload_id: string;
+  position_seconds: number;
+  label: string;
+  section_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReferenceAnalysisRange = AudioAnalysisRange & {
+  mode: "full" | "selection";
+};
+
+export type ReferenceAnalysis = {
+  id: string;
+  project_id: string;
+  audio_upload_id: string;
+  audio_derivative_id: string | null;
+  run_id: string;
+  version_number: number;
+  source_checksum: string;
+  analysis_range: ReferenceAnalysisRange;
+  tempo_bpm: number;
+  beat_grid: number[];
+  time_signature: { value: string; confidence: number };
+  key_candidate: { tonic: string; mode: string; value: string; confidence: number };
+  pitch_range: {
+    low_midi: number;
+    high_midi: number;
+    low_note: string;
+    high_note: string;
+    confidence: number;
+  };
+  loudness: {
+    integrated_dbfs: number;
+    peak_dbfs: number;
+    dynamic_range_db: number;
+    curve: Array<{ time_seconds: number; dbfs: number }>;
+    confidence: number;
+  };
+  structure_sections: Array<{
+    label: string;
+    start_seconds: number;
+    end_seconds: number;
+    confidence: number;
+  }>;
+  chord_candidates: Array<{
+    symbol: string;
+    start_seconds: number;
+    end_seconds: number;
+    confidence: number;
+  }>;
+  instrument_tags: Array<{ label: string; confidence: number }>;
+  energy_curve: Array<{ time_seconds: number; value: number }>;
+  production_features: Array<{ label: string; value: string; confidence: number }>;
+  confidence: Record<string, number>;
+  provider_name: string;
+  provider_version: string;
+  provider_params: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ReferenceAnalysisApplyField = "tempo_bpm" | "key" | "time_signature";
+
+export type ReferenceAnalysisApplyResult = {
+  analysis_id: string;
+  source_song_spec_id: string;
+  selected_fields: ReferenceAnalysisApplyField[];
+  changes: Array<{
+    field: ReferenceAnalysisApplyField;
+    current_value: string | number | null;
+    candidate_value: string | number;
+    confidence: number;
+  }>;
+  affected_asset_counts: Record<string, number>;
+  warnings: string[];
+  requires_confirmation: boolean;
+  applied: boolean;
+  new_song_spec_id: string | null;
+  new_song_spec_version: number | null;
 };
 
 export type AudioDemoVersion = {
@@ -529,12 +646,77 @@ export function audioUploadDownloadEndpoint(
   return `${audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId)}/download`;
 }
 
+export function audioDerivativesEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  audioUploadId: string,
+): string {
+  return audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId) + "/derivatives";
+}
+
+export function audioDerivativeDownloadEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  audioUploadId: string,
+  audioDerivativeId: string,
+): string {
+  return `${audioDerivativesEndpoint(apiBaseUrl, projectId, audioUploadId)}/${audioDerivativeId}/download`;
+}
+
+export function audioMarkersEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  audioUploadId: string,
+): string {
+  return `${audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId)}/markers`;
+}
+
+export function audioMarkerEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  markerId: string,
+): string {
+  return `${apiBaseUrl}/api/v1/projects/${projectId}/audio-markers/${markerId}`;
+}
+
 export function audioExtractMidiEndpoint(
   apiBaseUrl: string,
   projectId: string,
   audioUploadId: string,
 ): string {
   return `${audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId)}/extract-midi`;
+}
+
+export function audioAnalyzeEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  audioUploadId: string,
+): string {
+  return `${audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId)}/analyze`;
+}
+
+export function audioAnalysesEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  audioUploadId: string,
+): string {
+  return `${audioUploadEndpoint(apiBaseUrl, projectId, audioUploadId)}/analyses`;
+}
+
+export function referenceAnalysisEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  analysisId: string,
+): string {
+  return `${apiBaseUrl}/api/v1/projects/${projectId}/reference-analyses/${analysisId}`;
+}
+
+export function referenceAnalysisApplyEndpoint(
+  apiBaseUrl: string,
+  projectId: string,
+  analysisId: string,
+): string {
+  return `${referenceAnalysisEndpoint(apiBaseUrl, projectId, analysisId)}/apply`;
 }
 
 export function audioUploadStatusActionLabel(status: AudioUploadStatus): string {
@@ -710,6 +892,29 @@ export function sortAudioUploads(uploads: AudioUpload[]): AudioUpload[] {
   );
 }
 
+export function sortAudioDerivatives(derivatives: AudioDerivative[]): AudioDerivative[] {
+  return [...derivatives].sort((left, right) => {
+    const createdOrder = Date.parse(right.created_at) - Date.parse(left.created_at);
+    return createdOrder || right.id.localeCompare(left.id);
+  });
+}
+
+export function sortAudioMarkers(markers: AudioMarker[]): AudioMarker[] {
+  return [...markers].sort((left, right) => {
+    const uploadDifference = left.audio_upload_id.localeCompare(right.audio_upload_id);
+    const positionDifference = left.position_seconds - right.position_seconds;
+    return uploadDifference || positionDifference || left.id.localeCompare(right.id);
+  });
+}
+
+export function sortReferenceAnalyses(analyses: ReferenceAnalysis[]): ReferenceAnalysis[] {
+  return [...analyses].sort((left, right) => {
+    const uploadDifference = left.audio_upload_id.localeCompare(right.audio_upload_id);
+    const versionDifference = right.version_number - left.version_number;
+    return uploadDifference || versionDifference || right.id.localeCompare(left.id);
+  });
+}
+
 export function sortArrangementVersions(
   versions: ArrangementPlanVersion[],
 ): ArrangementPlanVersion[] {
@@ -833,10 +1038,27 @@ export function canApplyRevision(revision: RevisionRequest): boolean {
 
 export function validateAudioUploadFile(file: File | null): string | null {
   if (!file) {
-    return "Choose a WAV file to upload.";
+    return "Choose an audio file to upload.";
   }
-  if (!["audio/wav", "audio/x-wav", "audio/wave"].includes(file.type)) {
-    return "Only WAV uploads are supported.";
+  const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0] ?? "";
+  const contentTypesByExtension: Record<string, string[]> = {
+    ".wav": ["audio/wav", "audio/x-wav", "audio/wave"],
+    ".mp3": ["audio/mpeg", "audio/mp3"],
+    ".m4a": ["audio/mp4", "audio/x-m4a"],
+    ".flac": ["audio/flac", "audio/x-flac"],
+    ".ogg": ["audio/ogg", "application/ogg"],
+    ".oga": ["audio/ogg", "application/ogg"],
+  };
+  const expectedContentTypes = contentTypesByExtension[extension];
+  if (!expectedContentTypes) {
+    return "Use a WAV, MP3, M4A, FLAC, or OGG audio file.";
+  }
+  if (
+    file.type &&
+    file.type !== "application/octet-stream" &&
+    !expectedContentTypes.includes(file.type.toLowerCase())
+  ) {
+    return "The audio filename and media type do not match.";
   }
   return null;
 }
@@ -844,6 +1066,64 @@ export function validateAudioUploadFile(file: File | null): string | null {
 export function validateAudioUploadNotes(value: string): string | null {
   if (value.trim().length > 2000) {
     return "Audio notes must be 2000 characters or fewer.";
+  }
+  return null;
+}
+
+export function createAudioAnalysisRange(
+  anchorSeconds: number,
+  focusSeconds: number,
+  durationSeconds: number,
+): AudioAnalysisRange | null {
+  if (
+    !Number.isFinite(anchorSeconds) ||
+    !Number.isFinite(focusSeconds) ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds < 0.1
+  ) {
+    return null;
+  }
+  let startSeconds = Math.min(
+    durationSeconds,
+    Math.max(0, Math.min(anchorSeconds, focusSeconds)),
+  );
+  let endSeconds = Math.min(
+    durationSeconds,
+    Math.max(0, Math.max(anchorSeconds, focusSeconds)),
+  );
+  if (endSeconds - startSeconds < 0.1) {
+    endSeconds = Math.min(durationSeconds, startSeconds + 0.1);
+    startSeconds = Math.max(0, endSeconds - 0.1);
+  }
+  return {
+    start_seconds: Number(startSeconds.toFixed(3)),
+    end_seconds: Number(endSeconds.toFixed(3)),
+  };
+}
+
+export function formatAudioPosition(seconds: number): string {
+  const safeSeconds = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = (safeSeconds % 60).toFixed(2).padStart(5, "0");
+  return `${minutes}:${remainder}`;
+}
+
+export function validateAudioMarkerLabel(value: string): string | null {
+  if (!value.trim()) {
+    return "Marker label is required.";
+  }
+  if (value.trim().length > 120) {
+    return "Marker label must be 120 characters or fewer.";
+  }
+  return null;
+}
+
+export function validateAudioMarkerPosition(value: number, durationSeconds: number): string | null {
+  if (!Number.isFinite(value) || value < 0) {
+    return "Marker position must be zero or greater.";
+  }
+  if (value > durationSeconds) {
+    return "Marker position must be within the audio duration.";
   }
   return null;
 }
