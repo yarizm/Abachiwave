@@ -31,8 +31,11 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         "arrangement_plan_versions",
         "export_bundles",
         "generation_runs",
+        "audio_markers",
+        "audio_derivatives",
         "audio_demo_versions",
         "audio_uploads",
+        "reference_analysis_versions",
         "project_comments",
         "revision_requests",
         "project_events",
@@ -89,7 +92,96 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         run_columns = {
             row[1] for row in connection.execute("pragma table_info(generation_runs)").fetchall()
         }
+    with sqlite3.connect(db_path) as connection:
+        marker_columns = {
+            row[1] for row in connection.execute("pragma table_info(audio_markers)").fetchall()
+        }
+        marker_foreign_keys = connection.execute(
+            "pragma foreign_key_list(audio_markers)"
+        ).fetchall()
+    assert {"audio_upload_id", "position_seconds", "label", "section_id", "notes"}.issubset(
+        marker_columns
+    )
+    assert {row[2] for row in marker_foreign_keys} == {"projects", "audio_uploads"}
+    with sqlite3.connect(db_path) as connection:
+        derivative_columns = {
+            row[1]
+            for row in connection.execute("pragma table_info(audio_derivatives)").fetchall()
+        }
+        derivative_foreign_keys = connection.execute(
+            "pragma foreign_key_list(audio_derivatives)"
+        ).fetchall()
+    assert {
+        "audio_upload_id",
+        "kind",
+        "storage_key",
+        "format",
+        "sample_rate",
+        "channels",
+        "duration_seconds",
+        "checksum",
+        "source_checksum",
+    }.issubset(derivative_columns)
+    assert {row[2] for row in derivative_foreign_keys} == {"projects", "audio_uploads"}
+    with sqlite3.connect(db_path) as connection:
+        upload_column_rows = connection.execute("pragma table_info(audio_uploads)").fetchall()
+    upload_columns = {row[1] for row in upload_column_rows}
+    upload_nullability = {row[1]: row[3] for row in upload_column_rows}
+    assert "format" in upload_columns
+    assert upload_nullability["duration_seconds"] == 0
+    assert upload_nullability["sample_rate"] == 0
+    assert upload_nullability["channels"] == 0
+    assert upload_nullability["waveform_peaks"] == 0
     assert {"provider_usage", "error_code"}.issubset(run_columns)
+    with sqlite3.connect(db_path) as connection:
+        analysis_columns = {
+            row[1]
+            for row in connection.execute(
+                "pragma table_info(reference_analysis_versions)"
+            ).fetchall()
+        }
+        analysis_foreign_keys = connection.execute(
+            "pragma foreign_key_list(reference_analysis_versions)"
+        ).fetchall()
+    assert {
+        "audio_upload_id",
+        "audio_derivative_id",
+        "run_id",
+        "version_number",
+        "analysis_range",
+        "tempo_bpm",
+        "beat_grid",
+        "time_signature",
+        "key_candidate",
+        "pitch_range",
+        "loudness",
+        "structure_sections",
+        "chord_candidates",
+        "instrument_tags",
+        "energy_curve",
+        "production_features",
+        "confidence",
+        "provider_name",
+        "provider_version",
+    }.issubset(analysis_columns)
+    assert {row[2] for row in analysis_foreign_keys} == {
+        "projects",
+        "audio_uploads",
+        "audio_derivatives",
+        "generation_runs",
+    }
+    with sqlite3.connect(db_path) as connection:
+        midi_columns = {
+            row[1]
+            for row in connection.execute("pragma table_info(midi_asset_versions)").fetchall()
+        }
+        midi_foreign_keys = connection.execute(
+            "pragma foreign_key_list(midi_asset_versions)"
+        ).fetchall()
+    assert {"source_reference_analysis_id", "source_provider_manifest"}.issubset(
+        midi_columns
+    )
+    assert "reference_analysis_versions" in {row[2] for row in midi_foreign_keys}
     with sqlite3.connect(db_path) as connection:
         evaluation_columns = {
             row[1] for row in connection.execute("pragma table_info(evaluation_runs)").fetchall()
@@ -125,4 +217,6 @@ def test_alembic_migration_smoke(tmp_path: Path) -> None:
         "ix_evaluation_runs_workflow",
         "ix_evaluation_runs_status",
         "ix_structure_change_previews_project_created",
+        "ix_audio_markers_upload_position",
+        "ix_audio_derivatives_project_created",
     }.issubset(indexes)

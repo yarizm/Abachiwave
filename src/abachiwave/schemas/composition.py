@@ -544,6 +544,8 @@ class MidiAssetVersionRead(BaseModel):
     time_signature_map: list[MidiTimeSignatureEvent]
     source_revision_request_id: UUID | None
     source_audio_upload_id: UUID | None
+    source_reference_analysis_id: UUID | None
+    source_provider_manifest: dict[str, object]
     filename: str
     content_type: str
     size_bytes: int

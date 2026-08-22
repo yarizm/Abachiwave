@@ -200,6 +200,18 @@ class MidiAssetVersion(Base):
         nullable=True,
         index=True,
     )
+    source_reference_analysis_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("reference_analysis_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_provider_manifest: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
     parent_version_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("midi_asset_versions.id", ondelete="SET NULL"),

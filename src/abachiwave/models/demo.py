@@ -29,6 +29,8 @@ class GenerationRunStatus(StrEnum):
 class GenerationRunType(StrEnum):
     demo_generation = "demo_generation"
     audio_to_midi = "audio_to_midi"
+    audio_derivative = "audio_derivative"
+    reference_analysis = "reference_analysis"
     text_generation = "text_generation"
 
 

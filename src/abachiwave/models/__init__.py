@@ -7,7 +7,16 @@ from abachiwave.models.ai import (
     ProviderProfile,
     TextWorkflow,
 )
-from abachiwave.models.audio import AudioUpload, AudioUploadKind, AudioUploadStatus
+from abachiwave.models.audio import (
+    AudioDerivative,
+    AudioDerivativeKind,
+    AudioMarker,
+    AudioSourceFormat,
+    AudioUpload,
+    AudioUploadKind,
+    AudioUploadStatus,
+    ReferenceAnalysisVersion,
+)
 from abachiwave.models.comment import (
     ProjectComment,
     ProjectCommentStatus,
@@ -48,6 +57,10 @@ from abachiwave.models.song_spec import (
 __all__ = [
     "ArrangementPlanVersion",
     "AudioDemoVersion",
+    "AudioDerivative",
+    "AudioDerivativeKind",
+    "AudioMarker",
+    "AudioSourceFormat",
     "AudioUpload",
     "AudioUploadKind",
     "AudioUploadStatus",
@@ -78,6 +91,7 @@ __all__ = [
     "RevisionRequest",
     "RevisionRequestStatus",
     "RevisionTaskTarget",
+    "ReferenceAnalysisVersion",
     "SongSpecStatus",
     "SongSpecVersion",
     "StructureChangePreview",
