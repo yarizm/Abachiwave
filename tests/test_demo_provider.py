@@ -5,6 +5,8 @@ from io import BytesIO
 
 import pytest
 
+from abachiwave import main as api_main
+from abachiwave import worker
 from abachiwave.core.config import Settings
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.demo_provider import (
@@ -63,3 +65,18 @@ def test_build_demo_provider_raises_for_unknown_name() -> None:
     settings = Settings(_env_file=None, DEMO_PROVIDER_NAME="does_not_exist")
     with pytest.raises(UnknownDemoProviderError):
         build_demo_provider(settings)
+
+
+@pytest.mark.asyncio
+async def test_api_and_worker_startup_validate_the_same_provider_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(_env_file=None, DEMO_PROVIDER_NAME="does_not_exist")
+    monkeypatch.setattr(api_main, "get_settings", lambda: settings)
+    with pytest.raises(UnknownDemoProviderError):
+        async with api_main.lifespan(api_main.create_app()):
+            pytest.fail("API startup should reject an unknown demo provider")
+
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    with pytest.raises(UnknownDemoProviderError):
+        await worker.startup_worker({})

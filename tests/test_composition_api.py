@@ -468,6 +468,15 @@ async def test_midi_generation_listing_and_download(
     assert all(asset["note_events"] for asset in assets)
     assert all(asset["tempo_map"][0]["bpm"] == 128 for asset in assets)
     assert all(asset["time_signature_map"][0]["numerator"] == 4 for asset in assets)
+    chord_section_ids = {section["section_id"] for section in chords["sections"]}
+    lyric_section_ids = {section["section_id"] for section in lyrics["sections"]}
+    chord_asset = next(asset for asset in assets if asset["kind"] == "chord")
+    melody_asset = next(asset for asset in assets if asset["kind"] == "melody")
+    hook_asset = next(asset for asset in assets if asset["kind"] == "hook")
+    assert {event["section_id"] for event in chord_asset["note_events"]} <= chord_section_ids
+    assert {event["section_id"] for event in melody_asset["note_events"]} <= chord_section_ids
+    assert {event["section_id"] for event in hook_asset["note_events"]} <= lyric_section_ids
+    assert all(event["note_id"] for asset in assets for event in asset["note_events"])
 
     download_response = await client.get(
         f"/api/v1/projects/{project_id}/midi-assets/{assets[0]['id']}/download"

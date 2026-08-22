@@ -526,6 +526,8 @@ async def _apply_melody_task(
             chord_version_id=current.chord_version_id,
             source_revision_request_id=str(revision_id),
             source_audio_upload_id=current.source_audio_upload_id,
+            source_reference_analysis_id=current.source_reference_analysis_id,
+            source_provider_manifest=current.source_provider_manifest,
             parent_version_id=current.id,
             version_number=version_number,
             kind=MidiAssetKind.melody,
@@ -680,6 +682,8 @@ async def _copy_midi_version(
                 str(source_revision_request_id) if source_revision_request_id else None
             ),
             source_audio_upload_id=source.source_audio_upload_id,
+            source_reference_analysis_id=source.source_reference_analysis_id,
+            source_provider_manifest=source.source_provider_manifest,
             parent_version_id=source.id,
             version_number=version_number,
             kind=MidiAssetKind.melody,

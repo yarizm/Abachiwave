@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from abachiwave.core.config import get_settings
 from abachiwave.core.database import AsyncSessionLocal
+from abachiwave.models.audio import AudioSourceFormat, AudioUpload, AudioUploadStatus
 from abachiwave.models.demo import (
     AudioDemoVersion,
     GenerationRun,
@@ -345,6 +346,27 @@ async def cancel_generation_run(
     run.error_code = "task_cancelled"
     run.error_message = "cancelled by user"
     run.completed_at = datetime.now(UTC)
+    if run.run_type == GenerationRunType.audio_derivative:
+        upload_id = run.input_manifest.get("audio_upload_id")
+        if isinstance(upload_id, str):
+            upload = await session.get(AudioUpload, upload_id)
+            if (
+                upload is not None
+                and upload.format != AudioSourceFormat.wav
+                and upload.status == AudioUploadStatus.processing
+            ):
+                upload.status = AudioUploadStatus.failed
+                add_project_event(
+                    session,
+                    project_id=UUID(run.project_id),
+                    event_type="audio.normalization.failed",
+                    payload={
+                        "audio_upload_id": upload.id,
+                        "run_id": run.id,
+                        "reason": "cancelled",
+                    },
+                    generation_run_id=UUID(run.id),
+                )
     add_project_event(
         session,
         project_id=UUID(run.project_id),

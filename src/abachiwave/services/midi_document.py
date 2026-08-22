@@ -62,7 +62,13 @@ def build_midi_document(
     if kind is MidiAssetKind.chord:
         notes = _build_chord_notes(chord_sections, numerator, denominator)
     elif kind is MidiAssetKind.hook:
-        notes = _build_hook_notes(song_spec, lyric_sections, numerator, denominator)
+        notes = _build_hook_notes(
+            song_spec,
+            lyric_sections,
+            chord_sections,
+            numerator,
+            denominator,
+        )
     else:
         notes = _build_melody_notes(song_spec, chord_sections, numerator, denominator)
     return MidiDocument(
@@ -284,25 +290,43 @@ def _build_melody_notes(
 
 def _build_hook_notes(
     song_spec: SongSpecData,
-    sections: list[LyricSection],
+    lyric_sections: list[LyricSection],
+    chord_sections: list[ChordSection],
     numerator: int,
     denominator: int,
 ) -> list[MidiNoteEvent]:
     scale = _scale_notes(song_spec.key or "C major", octave=5)
-    hook_seed = sum(len(section.text) for section in sections) or 1
+    hook_seed = sum(len(section.text) for section in lyric_sections) or 1
     motif = [scale[(hook_seed + offset) % len(scale)] for offset in (0, 2, 4, 2)]
     beat_factor = 4 / denominator
     hook_index = next(
         (
             index
-            for index, section in enumerate(sections)
+            for index, section in enumerate(lyric_sections)
             if "chorus" in section.label.lower() or "hook" in section.label.lower()
         ),
         0,
     )
-    section = sections[hook_index] if sections else None
+    section = lyric_sections[hook_index] if lyric_sections else None
     section_id = section.section_id if section else "hook"
-    section_start = hook_index * 4 * numerator * beat_factor
+    chord_index = next(
+        (
+            index
+            for index, chord_section in enumerate(chord_sections)
+            if section is not None and chord_section.section_id == section.section_id
+        ),
+        None,
+    )
+    if chord_index is None and hook_index < len(chord_sections):
+        chord_index = hook_index
+    section_start = (
+        sum(
+            _section_length_beats(chord_section, numerator * beat_factor)
+            for chord_section in chord_sections[:chord_index]
+        )
+        if chord_index is not None
+        else 0.0
+    )
     notes: list[MidiNoteEvent] = []
     for beat_index in range(numerator * 2):
         notes.append(
@@ -316,6 +340,10 @@ def _build_hook_notes(
             )
         )
     return notes
+
+
+def _section_length_beats(section: ChordSection, bar_beats: float) -> float:
+    return max(1, len(section.measures), section.bars) * bar_beats
 
 
 def _build_meta_track(

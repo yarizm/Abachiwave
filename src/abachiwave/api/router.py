@@ -4,6 +4,7 @@ from abachiwave.api.health import router as health_router
 from abachiwave.api.v1.ai import evaluations_router, providers_router
 from abachiwave.api.v1.ai import router as ai_router
 from abachiwave.api.v1.audio import router as audio_router
+from abachiwave.api.v1.audio_markers import router as audio_markers_router
 from abachiwave.api.v1.comments import router as comments_router
 from abachiwave.api.v1.composition import export_router
 from abachiwave.api.v1.composition import router as composition_router
@@ -23,6 +24,7 @@ api_router.include_router(
     prefix="/api/v1/evaluations",
     tags=["evaluations"],
 )
+api_router.include_router(audio_markers_router, prefix="/api/v1/projects", tags=["audio markers"])
 api_router.include_router(audio_router, prefix="/api/v1/projects", tags=["audio"])
 api_router.include_router(comments_router, prefix="/api/v1/projects", tags=["comments"])
 api_router.include_router(composition_router, prefix="/api/v1/projects", tags=["composition"])

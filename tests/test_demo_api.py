@@ -10,7 +10,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from abachiwave.core.config import Settings
 from abachiwave.models.demo import GenerationRun
+from abachiwave.services import demo as demo_service
 from abachiwave.services.demo import execute_demo_generation
 from abachiwave.services.demo_provider import (
     DemoGenerationRequest,
@@ -168,6 +170,27 @@ async def test_demo_generation_requires_arrangement(
     assert response.json()["detail"]["missing"] == ["arrangement"]
     assert response.json()["detail"]["error_code"] == "prerequisites_missing"
     assert response.headers["X-Error-Code"] == "prerequisites_missing"
+
+
+@pytest.mark.asyncio
+async def test_demo_generation_returns_provider_unavailable(
+    client_with_demo_deps: tuple[AsyncClient, MemoryStorage, FakeQueue],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _storage, _queue = client_with_demo_deps
+    project_id, _arrangement = await _create_demo_ready_chain(client)
+    monkeypatch.setattr(
+        demo_service,
+        "get_settings",
+        lambda: Settings(_env_file=None, DEMO_PROVIDER_NAME="ghost_provider"),
+    )
+
+    response = await client.post(f"/api/v1/projects/{project_id}/demo/generate", json={})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Demo provider is unavailable"}
+    assert response.headers["X-Error-Code"] == "provider_unavailable"
+    assert response.headers["X-Error-Hint"] == "contact_support"
 
 
 @pytest.mark.asyncio

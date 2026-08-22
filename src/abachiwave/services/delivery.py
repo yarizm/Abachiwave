@@ -885,6 +885,7 @@ def _audio_upload_to_read(upload: AudioUpload) -> AudioUploadRead:
         status=upload.status,
         filename=upload.filename,
         content_type=upload.content_type,
+        format=upload.format,
         size_bytes=upload.size_bytes,
         checksum=upload.checksum,
         duration_seconds=upload.duration_seconds,

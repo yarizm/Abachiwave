@@ -1,11 +1,16 @@
 from abachiwave.models.composition import MidiAssetKind, MidiTransformOperation
 from abachiwave.schemas.composition import (
+    ChordSection,
+    LyricSection,
     MidiNoteEvent,
     MidiTempoEvent,
     MidiTimeSignatureEvent,
     MidiTransformRequest,
 )
+from abachiwave.schemas.song_specs import SongSpecData
+from abachiwave.services.chord_theory import normalize_chord_sections
 from abachiwave.services.midi_document import (
+    build_midi_document,
     parse_midi_document,
     render_midi_document,
     transform_midi_notes,
@@ -45,6 +50,61 @@ def test_rendered_midi_document_round_trips_through_mido_parser() -> None:
     assert len(parsed.note_events) == 2
     assert parsed.tempo_map[0].bpm == 128
     assert parsed.time_signature_map[0].numerator == 4
+
+
+def test_generated_documents_keep_sections_and_use_actual_hook_offset() -> None:
+    song_spec = SongSpecData(
+        theme="test",
+        genre=["rock"],
+        language="en",
+        tempo_bpm=120,
+        key="C major",
+        time_signature="4/4",
+        target_duration_seconds=30,
+        mood_curve={},
+        song_structure=["verse", "chorus"],
+        structure_sections=[],
+    )
+    lyric_sections = [
+        LyricSection(section_id="verse", label="Verse", text="verse"),
+        LyricSection(section_id="chorus", label="Chorus", text="chorus"),
+    ]
+    chord_sections = [
+        ChordSection(section_id="verse", label="Verse", bars=2, chords=["C", "G"]),
+        ChordSection(section_id="chorus", label="Chorus", bars=4, chords=["F", "C", "G", "C"]),
+    ]
+    chord_sections = normalize_chord_sections(
+        chord_sections,
+        key_name="C major",
+        time_signature="4/4",
+    )
+
+    documents = {
+        kind: build_midi_document(
+            kind=kind,
+            song_spec=song_spec,
+            chord_sections=chord_sections,
+            lyric_sections=lyric_sections,
+        )
+        for kind in MidiAssetKind
+    }
+
+    assert documents[MidiAssetKind.hook].note_events[0].start_beat == 8
+    assert {event.section_id for event in documents[MidiAssetKind.chord].note_events} == {
+        "verse",
+        "chorus",
+    }
+    assert {event.section_id for event in documents[MidiAssetKind.melody].note_events} == {
+        "verse",
+        "chorus",
+    }
+    assert {event.section_id for event in documents[MidiAssetKind.hook].note_events} == {"chorus"}
+    assert documents[MidiAssetKind.hook].note_events == build_midi_document(
+        kind=MidiAssetKind.hook,
+        song_spec=song_spec,
+        chord_sections=chord_sections,
+        lyric_sections=lyric_sections,
+    ).note_events
 
 
 def test_midi_note_transforms_are_deterministic_and_selection_scoped() -> None:

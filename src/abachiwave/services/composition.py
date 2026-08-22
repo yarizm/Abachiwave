@@ -39,9 +39,9 @@ from abachiwave.services.chord_theory import (
     transpose_chord_sections,
 )
 from abachiwave.services.events import add_project_event
-from abachiwave.services.midi import build_midi_bytes
 from abachiwave.services.midi_document import (
     MidiDocument,
+    build_midi_document,
     parse_midi_document,
     render_midi_document,
     transform_midi_notes,
@@ -127,6 +127,12 @@ def midi_asset_to_read(version: MidiAssetVersion) -> MidiAssetVersionRead:
         source_audio_upload_id=(
             UUID(version.source_audio_upload_id) if version.source_audio_upload_id else None
         ),
+        source_reference_analysis_id=(
+            UUID(version.source_reference_analysis_id)
+            if version.source_reference_analysis_id
+            else None
+        ),
+        source_provider_manifest=version.source_provider_manifest,
         filename=version.filename,
         content_type=version.content_type,
         size_bytes=version.size_bytes,
@@ -402,11 +408,17 @@ async def generate_midi_asset_versions(
     requested_kinds = kinds or list(DEFAULT_MIDI_KINDS)
     created_assets: list[MidiAssetVersion] = []
     for kind in requested_kinds:
-        midi_bytes = build_midi_bytes(
+        document = build_midi_document(
             kind=kind,
             song_spec=song_spec_data,
             chord_sections=chord_sections,
             lyric_sections=lyric_sections,
+        )
+        midi_bytes = render_midi_document(
+            kind=kind,
+            note_events=document.note_events,
+            tempo_map=document.tempo_map,
+            time_signature_map=document.time_signature_map,
         )
         asset = await create_midi_asset_version_from_bytes(
             session=session,
@@ -418,6 +430,7 @@ async def generate_midi_asset_versions(
             midi_bytes=midi_bytes,
             filename=None,
             storage=storage,
+            document=document,
         )
         created_assets.append(asset)
     return created_assets
@@ -436,6 +449,8 @@ async def create_midi_asset_version_from_bytes(
     storage: ObjectStorage,
     source_revision_request_id: UUID | None = None,
     source_audio_upload_id: UUID | None = None,
+    source_reference_analysis_id: UUID | None = None,
+    source_provider_manifest: dict[str, object] | None = None,
     parent_version_id: UUID | None = None,
     document: MidiDocument | None = None,
     commit: bool = True,
@@ -457,6 +472,10 @@ async def create_midi_asset_version_from_bytes(
             source_audio_upload_id=(
                 str(source_audio_upload_id) if source_audio_upload_id else None
             ),
+            source_reference_analysis_id=(
+                str(source_reference_analysis_id) if source_reference_analysis_id else None
+            ),
+            source_provider_manifest=source_provider_manifest or {},
             parent_version_id=str(parent_version_id) if parent_version_id else None,
             version_number=version_number,
             kind=kind,
@@ -545,6 +564,12 @@ async def update_midi_asset_version(
         source_audio_upload_id=(
             UUID(current.source_audio_upload_id) if current.source_audio_upload_id else None
         ),
+        source_reference_analysis_id=(
+            UUID(current.source_reference_analysis_id)
+            if current.source_reference_analysis_id
+            else None
+        ),
+        source_provider_manifest=current.source_provider_manifest,
         parent_version_id=UUID(current.id),
         document=document,
     )
@@ -591,6 +616,12 @@ async def transform_midi_asset_version(
         source_audio_upload_id=(
             UUID(current.source_audio_upload_id) if current.source_audio_upload_id else None
         ),
+        source_reference_analysis_id=(
+            UUID(current.source_reference_analysis_id)
+            if current.source_reference_analysis_id
+            else None
+        ),
+        source_provider_manifest=current.source_provider_manifest,
         parent_version_id=UUID(current.id),
         document=transformed,
     )

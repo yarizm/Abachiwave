@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from abachiwave.api.errors import ErrorCode, ErrorHint, ProblemError
 from abachiwave.main import create_app
+from abachiwave.services.demo_provider import UnknownDemoProviderError
 
 
 @pytest.mark.asyncio
@@ -43,6 +44,28 @@ async def test_cors_exposes_error_headers() -> None:
         for item in response.headers.get("access-control-expose-headers", "").split(",")
     }
     assert {"X-Error-Code", "X-Error-Hint", "X-Request-ID"}.issubset(exposed)
+
+
+@pytest.mark.asyncio
+async def test_cors_allows_audio_marker_delete_preflight() -> None:
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.options(
+            "/api/v1/projects/00000000-0000-0000-0000-000000000000/"
+            "audio-markers/00000000-0000-0000-0000-000000000000",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "DELETE",
+            },
+        )
+
+    assert response.status_code == 200
+    allowed_methods = {
+        item.strip()
+        for item in response.headers.get("access-control-allow-methods", "").split(",")
+    }
+    assert "DELETE" in allowed_methods
 
 
 @pytest.mark.asyncio
@@ -119,6 +142,24 @@ async def test_problem_error_no_hint_omits_header() -> None:
 
     assert response.headers["X-Error-Code"] == "resource_not_found"
     assert "X-Error-Hint" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_unknown_demo_provider_has_service_unavailable_contract() -> None:
+    app = create_app()
+
+    @app.get("/_test/provider-error")
+    async def provider_error() -> None:
+        raise UnknownDemoProviderError("ghost_provider")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/_test/provider-error")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Demo provider is unavailable"}
+    assert response.headers["X-Error-Code"] == "provider_unavailable"
+    assert response.headers["X-Error-Hint"] == "contact_support"
 
 
 @pytest.mark.asyncio

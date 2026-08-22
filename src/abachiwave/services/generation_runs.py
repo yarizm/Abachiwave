@@ -10,6 +10,7 @@ from abachiwave.core.database import AsyncSessionLocal
 from abachiwave.models.demo import GenerationRun, GenerationRunStatus
 
 TASK_TIMEOUT_ERROR = "task execution timed out"
+TASK_INTERRUPTED_ERROR = "task execution interrupted by worker shutdown"
 GenerationExecutor = Callable[[UUID], Awaitable[GenerationRun | None]]
 FailureMarker = Callable[[UUID, str], Awaitable[GenerationRun | None]]
 
@@ -43,6 +44,28 @@ async def mark_generation_run_failed(
             return run
         run.status = GenerationRunStatus.failed
         run.error_code = "task_timeout"
+        run.error_message = error_message
+        run.completed_at = datetime.now(UTC)
+        await session.commit()
+        await session.refresh(run)
+        return run
+
+
+async def mark_generation_run_interrupted(
+    run_id: UUID,
+    error_message: str = TASK_INTERRUPTED_ERROR,
+    *,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> GenerationRun | None:
+    selected_session_factory = session_factory or AsyncSessionLocal
+    async with selected_session_factory() as session:
+        run = await lock_generation_run(session, run_id)
+        if run is None:
+            return None
+        if run.status not in {GenerationRunStatus.queued, GenerationRunStatus.running}:
+            return run
+        run.status = GenerationRunStatus.failed
+        run.error_code = "task_interrupted"
         run.error_message = error_message
         run.completed_at = datetime.now(UTC)
         await session.commit()

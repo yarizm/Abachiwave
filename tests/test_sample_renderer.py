@@ -72,4 +72,3 @@ def test_load_sample_resampled_to_renderer_rate() -> None:
     assert rate == 44_100
     assert len(resampled) == int(frame_count / (rate / SAMPLE_RATE))
     assert resampled.itemsize == 2
-

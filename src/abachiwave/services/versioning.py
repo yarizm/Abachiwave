@@ -16,6 +16,7 @@ _VERSION_CONSTRAINT_NAMES = {
     "uq_chord_progression_versions_project_version",
     "uq_lyrics_versions_project_version",
     "uq_midi_asset_versions_project_kind_version",
+    "uq_reference_analysis_upload_version",
     "uq_song_spec_versions_project_version",
 }
 _SQLITE_VERSION_CONFLICT_COLUMNS = {
@@ -26,6 +27,10 @@ _SQLITE_VERSION_CONFLICT_COLUMNS = {
     (
         "midi_asset_versions.project_id, midi_asset_versions.kind, "
         "midi_asset_versions.version_number"
+    ),
+    (
+        "reference_analysis_versions.audio_upload_id, "
+        "reference_analysis_versions.version_number"
     ),
     "song_spec_versions.project_id, song_spec_versions.version_number",
 }
