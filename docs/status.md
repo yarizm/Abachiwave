@@ -94,6 +94,7 @@ docker compose up -d --build     8 services healthy
 scripts/smoke_mvp.py             ok
 npm run test:e2e                 25 passed, 1 desktop-only skip
 Basic Pitch faults               5 scenarios passed
+compressed decode (ffmpeg)       mp3/m4a/flac/ogg all passed
 ```
 
 PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `basic-pitch` sidecar 均通过
@@ -107,8 +108,9 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 同日 `basic-pitch` sidecar 完成 440 次真实推理的 Vocadito 参数扫描，中位 RTF 0.023、中位时延
 0.44 s、空结果率 0。
 
-本轮**未**启动 `ffmpeg` profile，因此真实 MP3/M4A/FLAC/OGG 标准化未重新验证；最近一次实机证据为
-2026-08-09。
+`ffmpeg` profile 下对 MP3、M4A、FLAC、OGG 各上传一份真实压缩音频：格式识别正确，派生统一为
+48 kHz、双声道、16-bit PCM WAV，派生 `source_checksum` 指回源文件，原始文件下载后与上传字节
+完全一致，确认标准化不覆盖原件。
 
 ## 6. 当前工作树与风险
 
@@ -116,7 +118,7 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 - 原先的大批未提交修改已按依赖序拆成 7 个提交：gitignore、数据层、Provider/Worker、API/编排、
   前端、评测框架、文档。每个提交是一个独立审查单元。
 - 当前 migration 只有一个 head：`202608100001`。
-- 新功能已有单元、API、浏览器和故障注入覆盖；仅 `ffmpeg` profile 的真实解码链路未在当前 HEAD 重跑。
+- 新功能已有单元、API、浏览器、故障注入和真实压缩格式解码覆盖。
 - Compose 使用默认开发凭据、开发服务器和绑定挂载，不是生产部署方案。
 
 ## 7. 当前未完成项
