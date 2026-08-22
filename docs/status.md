@@ -45,7 +45,7 @@ Abachiwave 是本地优先、单用户的音乐创作工作台。它把灵感、
 - 压缩格式通过独立 ffmpeg Worker 生成 48 kHz、双声道、16-bit PCM WAV；原始文件不覆盖。
 - 波形、播放头、Audio Marker CRUD/seek 和 analysis region 拖选、数值编辑、清除与片段试听。
 - 可追溯的参考音频分析候选；应用 tempo、key、time signature 时创建新的 SongSpec draft。
-- `local_monophonic_wav_to_midi` fallback 与可选 Basic Pitch 0.4.0 sidecar。
+- `local_monophonic_wav_to_midi` fallback 与可选 Basic Pitch 0.4.0 sidecar，默认 `onset_threshold=0.6`。
 - 独立 `arq:audio-midi` 队列、MIDI 来源 checksum、分析范围、Provider manifest 和版本血缘。
 - timeout、断连、非法响应、取消和 Worker 中断均有稳定任务错误码，并避免物化孤立资产。
 

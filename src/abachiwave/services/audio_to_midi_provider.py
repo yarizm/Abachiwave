@@ -190,7 +190,11 @@ def build_audio_to_midi_provider(
 
 def basic_pitch_default_params() -> dict[str, bool | float]:
     return {
-        "onset_threshold": 0.5,
+        # 0.60 selected on singer-isolated Vocadito development groups and confirmed on the
+        # holdout groups (+0.047 macro offset F1) and on GuitarSet solo/comp (+0.020/+0.029)
+        # without degrading any category. See docs/audio-to-midi-benchmark.md sections 7 and 9.
+        # Existing runs replay the parameters snapshotted in their own run record.
+        "onset_threshold": 0.6,
         "frame_threshold": 0.3,
         "minimum_note_length_ms": 127.7,
         "minimum_frequency_hz": 55.0,

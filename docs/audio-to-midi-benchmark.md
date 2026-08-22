@@ -363,6 +363,12 @@ parameter_tuning_improves_quality_but_model_gap_remains`，
 扫描工具为每个候选保存独立报告。使用 `--reuse-existing` 时，只有有效参数和有序样本 ID 与当前
 候选完全一致的报告才会复用。第三方音频和临时报告不得提交到仓库。
 
+`support/basic_pitch_vocadito_sweep.json` 与 `support/basic_pitch_vocadito_refinement.json` 是针对
+`onset_threshold` 默认值仍为 0.5 时写下的历史定义，其 sha256 已记录在对应报告中，因此不再修改。
+默认值改为 0.6 后，这两份定义里的 `baseline` 与 `onset-0.60` 有效参数相同，直接重跑会触发
+"unique effective parameters" 校验失败——这是工具在正确提示定义已过期。需要重跑时应新建定义，
+不要改写历史文件。
+
 ## 10. 正式放行流程
 
 1. 固定数据集版本、许可证、源归档与逐 member checksum 和分类覆盖。

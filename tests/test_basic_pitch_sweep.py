@@ -57,7 +57,7 @@ def test_sweep_definition_rejects_duplicate_effective_parameters() -> None:
                 "baseline_candidate_id": "baseline",
                 "candidates": [
                     {"id": "baseline", "params": {}},
-                    {"id": "same-default", "params": {"onset_threshold": 0.5}},
+                    {"id": "same-default", "params": {"onset_threshold": 0.6}},
                 ],
             }
         )
