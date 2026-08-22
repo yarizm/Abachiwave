@@ -74,6 +74,10 @@ Vocadito 两位人工标注者在同一 evaluator 下的 macro no-offset/offset 
 - 沿曲线 precision 从 0.491 升到 0.694，recall 从 0.507 降到 0.443：剩余差距来自漏音，不是阈值位置。
 - 结论是 onset threshold 的调参空间已探完，模型差距无法靠调参关闭。
 
+同日在 GuitarSet 4 条 excerpt 上复现 baseline 并完成 `onset 0.60` 退化验证：overall offset F1
+0.444→0.474、solo 0.708→0.728、comp 0.380→0.409，三个类别均无退化；时长 MAE 与 P95 时延同步
+改善，资源占用持平。该参数在 Vocadito 上选出、GuitarSet 未参与选参，属跨数据集独立确认。
+
 这些结果是模型选择证据，不是正式 release gate。详细口径见
 [`audio-to-midi-benchmark.md`](audio-to-midi-benchmark.md)。
 

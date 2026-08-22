@@ -238,6 +238,21 @@ uv run python support/benchmark_audio_to_midi.py \
 漏音、和弦音高分配与止音。JAMS 没有逐音符 velocity，参考 MIDI 固定写入 100，因此该数据集的
 velocity MAE 只能作为诊断输出，不能设置发布阈值。
 
+2026-08-22 在同一子集上复现了上述 baseline（785/772、0.744/0.444、solo 0.866/0.708、
+comp 0.714/0.380 全部一致），并追加 `onset_threshold=0.60` 的退化验证：
+
+| Scope | baseline no-offset/offset F1 | onset 0.60 no-offset/offset F1 | Δ offset |
+| --- | ---: | ---: | ---: |
+| overall | 0.744 / 0.444 | 0.767 / 0.474 | +0.030 |
+| monophonic_instrumental_phrase | 0.866 / 0.708 | 0.874 / 0.728 | +0.020 |
+| polyphonic_instrumental_phrase | 0.714 / 0.380 | 0.739 / 0.409 | +0.029 |
+
+三个类别均无退化，复调也在内。预测音符从 772 降到 699、overall recall 从 0.738 降到 0.725，
+但 precision 的增益更大。起音 MAE 持平（12.4 ms），时长 MAE 从 111.9 ms 改善到 100.2 ms，
+中位时延 725→708 ms、P95 1035→831 ms、峰值 CPU 447%→421%、峰值内存 763→771 MiB。
+该参数在 Vocadito 上按歌手隔离选出，GuitarSet 未参与选参，因此这是一次跨数据集、跨乐器的
+独立确认。
+
 该子集已补足真实乐句级单旋律和复调乐器观察证据，但只有四条吉他 excerpt，仍不足以直接设置
 通用产品门禁；报告 `passed: true` 同样只表示未配置阈值。正式阈值还需扩大演奏者/风格覆盖，
 并补充真实演唱乐句与其他乐器。
@@ -341,8 +356,9 @@ uv run python -m support.sweep_basic_pitch_parameters \
 结论：onset threshold 的调参空间已经探完，`onset 0.60` 是当前最稳健候选，但其留出 offset F1 0.410
 距 0.50 观察目标仍差 0.09。工具输出 `recommendation:
 parameter_tuning_improves_quality_but_model_gap_remains`，
-`selected_candidate_meets_targets_on_holdout: false`。是否把 `onset 0.60` 固化为默认参数仍需 GuitarSet
-退化证据；换 Provider 的同口径比较现已具备完整的 Basic Pitch 基线。
+`selected_candidate_meets_targets_on_holdout: false`。GuitarSet 退化证据已于 2026-08-22 补齐（见
+第 7 节）：`onset 0.60` 在 overall、solo 和 comp 三个类别上均优于默认值，无退化，因此可以作为默认
+参数固化。这不改变模型差距的结论——换 Provider 的同口径比较现已具备完整的 Basic Pitch 基线。
 
 扫描工具为每个候选保存独立报告。使用 `--reuse-existing` 时，只有有效参数和有序样本 ID 与当前
 候选完全一致的报告才会复用。第三方音频和临时报告不得提交到仓库。
