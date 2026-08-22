@@ -141,8 +141,10 @@ jobs:
           api_pid=$!
           uv run arq abachiwave.worker.WorkerSettings > worker.log 2>&1 &
           worker_pid=$!
+          uv run arq abachiwave.worker.AudioToMidiWorkerSettings > audio-midi-worker.log 2>&1 &
+          audio_midi_pid=$!
           cleanup() {
-            kill "$api_pid" "$worker_pid" 2>/dev/null || true
+            kill "$api_pid" "$worker_pid" "$audio_midi_pid" 2>/dev/null || true
           }
           trap cleanup EXIT
           uv run python scripts/smoke_mvp.py
@@ -157,6 +159,7 @@ jobs:
           path: |
             api.log
             worker.log
+            audio-midi-worker.log
             minio.log
           if-no-files-found: warn
           retention-days: 7
