@@ -8,9 +8,9 @@ Abachiwave 是一个面向音乐创作者的本地优先 AI 协作工作台，�
 
 - 项目、Idea Intake、需求澄清和版本化 SongSpec。
 - 歌词、和弦、chord/melody/hook MIDI 与编曲方案生成和编辑。
-- 基于 Arq 的异步 WAV Demo 生成、重试、取消和浏览器试听。
+- 基于 Arq 的异步 WAV Demo 生成、重试、取消和浏览器试听；默认 Demo Provider 使用打包的 CC0 鼓采样进行本地确定性渲染。
 - Revision Planner、版本差异、恢复和项目事件记录。
-- WAV 上传、波形展示和单旋律转 MIDI。
+- WAV、MP3、M4A、FLAC、OGG 上传，标准 PCM WAV 派生、波形展示和单旋律转 MIDI。
 - 项目评审、评论、handoff 摘要和 ZIP 导出。
 - 可持久化的 English/中文 UI 语言设置。
 - 统一歌曲段落时间线，支持新增、复制、删除、重排、重命名、影响预览、本地草稿与撤销/重做。
@@ -18,7 +18,9 @@ Abachiwave 是一个面向音乐创作者的本地优先 AI 协作工作台，�
 - 专业和弦编辑器，支持小节/拍点网格、转位与延伸音、借用和弦提示、罗马/Nashville 数字谱、全曲或段落移调，以及带节拍器和循环的浏览器试听。
 - MIDI 钢琴卷帘，支持三轨切换与叠加、音符新增/拖动/缩放/多选/复制、量化与移调等变换、Tone.js 试听、本地草稿和不可变版本保存。
 
-生成器目前采用本地确定性实现，不需要外部 LLM、音乐模型、GPU 或 ffmpeg。
+生成器默认采用本地确定性实现，不需要外部 LLM、音乐模型或 GPU。audio-to-MIDI 可选用
+隔离的 Basic Pitch 服务；压缩音频导入使用独立 `ffmpeg-worker`，两者分别通过
+`basic-pitch` 和 `ffmpeg` Compose profile 启用。
 
 ## 环境要求
 
@@ -34,6 +36,19 @@ uv sync --all-groups --frozen
 cd web && npm ci && cd ..
 docker compose up -d --build
 docker compose ps
+```
+
+需要导入 MP3、M4A、FLAC 或 OGG 时启动隔离的音频标准化 Worker：
+
+```bash
+docker compose --profile ffmpeg up -d --build
+```
+
+需要真实 Basic Pitch audio-to-MIDI 时，在 `.env` 设置
+`AUDIO_TO_MIDI_PROVIDER_NAME=spotify_basic_pitch`，然后启动：
+
+```bash
+docker compose --profile basic-pitch up -d --build
 ```
 
 本地服务：
@@ -76,16 +91,35 @@ cd web && npm run test:e2e
 uv run python scripts/audit_storage.py
 ```
 
+Basic Pitch 故障矩阵和 audio-to-MIDI 质量基准：
+
+```bash
+uv run python support/validate_basic_pitch_faults.py
+uv run python support/fetch_nsynth_benchmark_subset.py path/to/nsynth-subset
+uv run python support/fetch_guitarset_benchmark_subset.py path/to/guitarset-subset
+uv run python support/fetch_vocadito_benchmark_dataset.py path/to/vocadito
+uv run python support/evaluate_audio_to_midi_reference_agreement.py path/to/vocadito/manifest.json
+uv run python support/benchmark_audio_to_midi.py path/to/manifest.json
+uv run python -m support.sweep_basic_pitch_parameters path/to/vocadito/manifest.json \
+  --output path/to/vocadito/basic-pitch-sweep.json
+```
+
 ## 文档
 
+- [文档索引](docs/README.md)
+- [当前状态](docs/status.md)
+- [后续开发路径](docs/roadmap.md)
+- [开发指南](docs/development.md)
 - [API 接口](docs/api.md)
 - [系统架构](docs/architecture.md)
+- [本地运行与排障](docs/runbook.md)
+- [Audio-to-MIDI 质量基准](docs/audio-to-midi-benchmark.md)
 
 ## 当前限制
 
 - 当前为匿名单用户模式，不适合直接暴露到公网。
-- 音频分析仅支持 WAV，单文件上限默认 25 MB。
-- 本地生成结果定位为可验证草稿，不代表商业制作质量。
+- WAV 可直接分析；MP3、M4A、FLAC、OGG 会先异步生成标准 PCM WAV。单文件上限默认 25 MB。
+- 本地生成结果定位为可验证草稿，不代表商业制作质量；Demo 已采用采样驱动渲染，但仍不是商业音乐模型输出。
 - Compose 默认凭据仅用于本地开发环境。
 
 ## License

@@ -8,7 +8,7 @@ The API is served by FastAPI. The interactive OpenAPI document is available at `
 - Identifiers are UUID strings.
 - JSON is used unless an endpoint explicitly accepts multipart data or returns a file.
 - Every response returns `X-Request-ID`. A valid caller-provided `X-Request-ID` is preserved.
-- Validation errors return `422`; missing resources return `404`; incomplete asset chains and invalid state transitions return `409`.
+- Validation errors return `422`; missing resources return `404`; incomplete asset chains and invalid state transitions return `409`; an unavailable configured Provider returns `503` when resolved during a request.
 - Collection endpoints accept `limit` (default `50`, maximum `200`) and zero-based `offset` query parameters.
 
 ## Error response structure
@@ -186,6 +186,12 @@ results are also immutable child versions, and their downloaded MIDI file is det
 rebuilt from the structured data. Pre-v2 MIDI remains downloadable but has no editable piano-roll
 data until regenerated or restored through a v2 editing workflow.
 
+An audio-extracted MIDI version also exposes `source_audio_upload_id`, optional
+`source_reference_analysis_id`, and `source_provider_manifest`. The manifest records the generation
+run, Provider name/version/parameters, exact upload and PCM derivative, source and analyzed checksums,
+and source-relative analysis range. Later note edits, transforms, revisions, and restores preserve
+this lineage instead of replacing it with the editing operation.
+
 ## Demo and tasks
 
 | Method | Path | Description |
@@ -200,18 +206,98 @@ data until regenerated or restored through a v2 editing workflow.
 | POST | `/api/v1/tasks/{task_id}/cancel` | Cancel a queued or running task |
 
 Generation runs include `provider_usage` and a stable `error_code`. Run types currently include
-`demo_generation`, `audio_to_midi`, and `text_generation`. Text evaluations use their dedicated
+`demo_generation`, `audio_to_midi`, `audio_derivative`, `reference_analysis`, and `text_generation`. Text evaluations use their dedicated
 `EvaluationRun` state rather than a project-scoped `GenerationRun`.
+
+Demo generation resolves the configured `MusicGenerationProvider` from `DEMO_PROVIDER_NAME`. The
+default `local_deterministic_wav` Provider renders a standard mono 16-bit WAV from packaged CC0 drum
+samples plus deterministic bass, chord-pad, and melody layers. A queued run records the Provider
+name, version, parameters, and input manifest; the Worker rebuilds the Provider from that record so a
+later configuration change cannot silently alter the run's provenance. An unknown configured Provider
+returns `503` with `X-Error-Code: provider_unavailable`; an unavailable Provider recorded on an
+already queued run causes that run to finish as `failed` rather than falling back.
 
 ## Audio uploads
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/v1/projects/{project_id}/audio-uploads` | Upload WAV multipart data |
+| POST | `/api/v1/projects/{project_id}/audio-uploads` | Upload WAV, MP3, M4A, FLAC, or OGG multipart data |
 | GET | `/api/v1/projects/{project_id}/audio-uploads` | List audio uploads |
 | GET, PATCH | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}` | Read or update upload metadata |
 | GET | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/download` | Stream uploaded audio |
 | POST | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/extract-midi` | Queue melody MIDI extraction |
+| POST | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/derivatives` | Queue standard PCM WAV normalization (`kind: pcm_wav`) |
+| GET | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/derivatives` | List ready audio derivatives |
+| GET | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/derivatives/{derivative_id}/download` | Stream a project-scoped audio derivative |
+| GET, POST | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/markers` | List or create time markers on an upload |
+| PATCH, DELETE | `/api/v1/projects/{project_id}/audio-markers/{marker_id}` | Update or remove a marker |
+| POST | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/analyze` | Queue full-file or selected-range reference analysis |
+| GET | `/api/v1/projects/{project_id}/audio-uploads/{audio_upload_id}/analyses` | List immutable reference-analysis versions |
+| GET | `/api/v1/projects/{project_id}/reference-analyses/{analysis_id}` | Read one project-scoped analysis candidate |
+| POST | `/api/v1/projects/{project_id}/reference-analyses/{analysis_id}/apply` | Preview or confirm selected SongSpec field changes |
+
+The upload endpoint validates filename extension, normalized media type, and file signature together.
+WAV uploads are analyzed synchronously. MP3, M4A, FLAC, and OGG uploads return with `processing`
+status and automatically create an `audio_derivative` GenerationRun on the dedicated
+`arq:audio-ffmpeg` queue; their duration, sample rate, channels, and waveform peaks remain `null` until
+normalization succeeds. Decode, enqueue, or cancellation failures transition the upload to `failed`,
+and retrying the derivative transitions it back to `processing`.
+
+The ffmpeg worker decodes through stdin to fixed 48 kHz stereo 16-bit raw PCM on stdout, then wraps a
+standard WAV container. It keeps the original upload unchanged and writes an idempotent
+`audio_derivatives` row keyed by source checksum. A second request while the same source is queued or
+running returns `409`. Public responses and download endpoints expose derivative metadata and bytes but
+never expose the internal storage key.
+
+Audio markers contain `position_seconds`, a trimmed non-empty `label`, and optional `section_id` and
+`notes`. Positions must be within the available audio duration; markers cannot be created before a
+compressed upload finishes normalization. Invalid positions return `422` with
+`X-Error-Code: validation_failed` and a `fields.position_seconds` message. Marker queries and updates
+are project-scoped, so an ID from another project returns `404`. Marker mutations emit
+`audio.marker.created`, `audio.marker.updated`, or `audio.marker.deleted` project events.
+
+The melody extraction request requires `song_spec_id`; optional `target_kind` defaults to `"melody"`
+and rejects every other kind. It also accepts optional `analysis_range` and `reference_analysis_id`.
+The range contains `start_seconds` and `end_seconds`, must
+be at least 0.1 seconds, ordered, non-negative, and within the normalized audio duration; invalid ranges
+return `422` with `fields.analysis_range`. A supplied analysis must belong to the same upload, exact PCM
+derivative, checksum, project, and range or the API returns `409`.
+
+Every new extraction run stores an explicit `analysis_range` manifest (`mode: full` or
+`mode: selection`) plus the exact upload, derivative, checksums, analysis version, and Provider identity.
+For a selection, the dedicated `arq:audio-midi` Worker slices the normalized WAV before invoking the
+Provider and records source bytes, analyzed bytes, parsed note count, and lineage IDs in
+`provider_usage`. Existing queued runs without the range or checksum fields remain compatible: the
+Worker resolves them from the immutable recorded upload/derivative, while any explicitly recorded
+checksum mismatch still fails the run.
+
+`AUDIO_TO_MIDI_PROVIDER_NAME` selects `local_monophonic_wav_to_midi` (the deterministic offline/test
+fallback) or `spotify_basic_pitch`. Basic Pitch is reached through an isolated HTTP service rather than
+loaded into the Python 3.12 API/Worker image. An unknown configured Provider prevents API/Worker
+startup; request-time resolution maps the same error to `503`. A queued run is always rebuilt from its
+recorded Provider name/version and never silently switches implementations.
+
+Basic Pitch transport failures use stable task error codes: `audio_to_midi_provider_timeout` for an
+HTTP timeout, `audio_to_midi_provider_unavailable` for connection failures, and
+`audio_to_midi_provider_invalid_response` for non-200 responses, version drift, or invalid MIDI bytes.
+A Worker shutdown while a generation job is active records `task_interrupted`. Terminal runs are
+idempotent: a stale or retried queue message cannot execute a failed, cancelled, or succeeded run again.
+
+Reference analysis accepts the same optional `analysis_range` contract. The normal Arq Worker reads the
+exact source or ready PCM derivative recorded in the run manifest and creates a new
+`reference_analysis_versions` row. Results include tempo and beat grid, time-signature and key
+candidates, pitch and loudness ranges, source-relative structure and chord candidates, instrument and
+production tags, energy curves, per-field confidence, and Provider name/version/parameters. These
+records are immutable candidates: completing analysis never changes SongSpec or another formal asset.
+
+Apply is an explicit two-step operation. The request supplies an approved `song_spec_id`, one or more
+unique fields from `tempo_bpm`, `key`, and `time_signature`, and `confirm`. With `confirm: false`, the API
+returns current-to-candidate changes, confidence, affected-asset counts, and warnings without writing a
+version. Repeating the selection with `confirm: true` creates a new draft SongSpec child version; the
+approved source remains current and existing lyrics, chords, MIDI, and arrangements remain linked to
+their original SongSpec until the user reviews and regenerates affected assets. A no-op selection returns
+`409`.
+
 
 ## Revisions and collaboration
 
