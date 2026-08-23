@@ -1,6 +1,6 @@
 # Abachiwave 当前状态
 
-> 快照日期：2026-08-22
+> 快照日期：2026-08-23
 >
 > 本文只记录当前已证明的实现和风险；后续工作见 [`roadmap.md`](roadmap.md)。
 
@@ -78,17 +78,25 @@ Vocadito 两位人工标注者在同一 evaluator 下的 macro no-offset/offset 
 0.444→0.474、solo 0.708→0.728、comp 0.380→0.409，三个类别均无退化；时长 MAE 与 P95 时延同步
 改善，资源占用持平。该参数在 Vocadito 上选出、GuitarSet 未参与选参，属跨数据集独立确认。
 
+2026-08-23 补做止音误差分解，检验"加一层止音精修即可达标"这条线索。完美止音层的上限就是
+no-offset F1：留出集补满 0.163 缺口即可从 0.410 到 0.572，确实能越过 0.50。但误差是无偏对称散布，
+不是可移除的偏置——留出集有符号时长误差中位数 +0.1 ms、预测/参考时长比中位数 1.0005、越界样本
+在偏长与偏短之间 50.6/49.4 开。时长缩放与平移的网格搜索最佳收益在开发集 +0.009、留出集 +0.002，
+任何强到有意义的变换都使指标下降。结论：止音缺口真实，但收回它需要逐音符声学证据而非后处理，
+这条线索关闭，替代 Provider 比较是唯一剩余路径。
+
 这些结果是模型选择证据，不是正式 release gate。详细口径见
 [`audio-to-midi-benchmark.md`](audio-to-midi-benchmark.md)。
 
 ## 5. 当前验证证据
 
-2026-08-22 对当前 HEAD 完成完整验证矩阵：
+2026-08-22 完成完整验证矩阵；2026-08-23 的止音分析只改动 Python 与文档，因此当日重跑了后端三项
+（ruff / mypy / pytest），前端与 Compose/e2e 行沿用 2026-08-22 的结果：
 
 ```text
 uv run ruff check .              passed
 uv run mypy                      148 source files, no issues
-uv run pytest -q                 233 passed
+uv run pytest -q                 236 passed
 uv run alembic heads             202608100001 (head)
 npm run lint                     passed
 npm run typecheck                passed
@@ -112,6 +120,9 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 
 同日 `basic-pitch` sidecar 完成 440 次真实推理的 Vocadito 参数扫描，中位 RTF 0.023、中位时延
 0.44 s、空结果率 0。
+
+2026-08-23 `support/analyze_audio_to_midi_offsets.py` 在同一 sidecar 上对 40 条 Vocadito 重新推理，
+`identity` 在开发集与留出集分别复现出 0.557/0.394 与 0.572/0.410，与第 4 节记录一致。
 
 `ffmpeg` profile 下对 MP3、M4A、FLAC、OGG 各上传一份真实压缩音频：格式识别正确，派生统一为
 48 kHz、双声道、16-bit PCM WAV，派生 `source_checksum` 指回源文件，原始文件下载后与上传字节
