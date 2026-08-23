@@ -14,6 +14,7 @@ from abachiwave.evaluations.audio_to_midi import (
     SampleBenchmarkResult,
     TimedMidiNote,
     aggregate_benchmark_results,
+    collect_note_timing_errors,
     compare_note_sequences,
     compare_reference_candidates,
     evaluate_thresholds,
@@ -285,3 +286,50 @@ def test_manifest_resolves_and_validates_alternative_references(tmp_path: Path) 
     duplicate_payload["samples"][0]["alternative_references"][0]["id"] = "annotator_1"
     with pytest.raises(ValidationError, match="reference ids must be unique"):
         AudioToMidiBenchmarkManifest.model_validate(duplicate_payload)
+
+
+def _note(pitch: int, onset: float, offset: float, velocity: int = 80) -> TimedMidiNote:
+    return TimedMidiNote(
+        pitch=pitch,
+        onset_seconds=onset,
+        offset_seconds=offset,
+        velocity=velocity,
+    )
+
+
+def test_collect_note_timing_errors_reports_signed_errors() -> None:
+    reference = [_note(60, 0.0, 1.0), _note(62, 2.0, 2.4)]
+    predicted = [_note(60, 0.02, 1.30), _note(62, 1.99, 2.30)]
+
+    errors = collect_note_timing_errors(reference, predicted)
+
+    assert len(errors) == 2
+    held_too_long, released_too_early = errors
+    assert held_too_long.onset_error_seconds == pytest.approx(0.02)
+    assert held_too_long.duration_error_seconds == pytest.approx(0.28)
+    assert held_too_long.offset_error_seconds == pytest.approx(0.30)
+    assert released_too_early.duration_error_seconds == pytest.approx(-0.09)
+    assert released_too_early.offset_error_seconds == pytest.approx(-0.10)
+
+
+def test_collect_note_timing_errors_uses_the_ratio_tolerance_for_long_notes() -> None:
+    long_note = collect_note_timing_errors([_note(60, 0.0, 4.0)], [_note(60, 0.0, 4.6)])[0]
+    short_note = collect_note_timing_errors([_note(60, 0.0, 0.2)], [_note(60, 0.0, 0.24)])[0]
+
+    assert long_note.allowed_offset_error_seconds == pytest.approx(0.8)
+    assert long_note.offset_within_tolerance is True
+    assert short_note.allowed_offset_error_seconds == pytest.approx(0.05)
+    assert short_note.offset_within_tolerance is True
+
+    outside = collect_note_timing_errors([_note(60, 0.0, 0.2)], [_note(60, 0.0, 0.26)])[0]
+    assert outside.offset_within_tolerance is False
+
+
+def test_collect_note_timing_errors_excludes_unmatched_notes() -> None:
+    reference = [_note(60, 0.0, 1.0), _note(64, 5.0, 5.5)]
+    predicted = [_note(60, 0.01, 1.0), _note(67, 5.0, 5.5), _note(60, 9.0, 9.5)]
+
+    errors = collect_note_timing_errors(reference, predicted)
+
+    assert len(errors) == 1
+    assert errors[0].onset_error_seconds == pytest.approx(0.01)

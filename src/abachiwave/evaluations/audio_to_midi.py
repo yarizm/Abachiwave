@@ -45,6 +45,25 @@ class NoteMatchMetrics:
 
 
 @dataclass(frozen=True)
+class NoteTimingError:
+    """Signed timing error of one onset+pitch matched note pair.
+
+    ``duration_mae_ms`` in :class:`NoteMatchMetrics` is an absolute mean and cannot
+    distinguish a systematic bias from symmetric scatter. These signed samples can.
+    """
+
+    reference_duration_seconds: float
+    onset_error_seconds: float
+    duration_error_seconds: float
+    offset_error_seconds: float
+    allowed_offset_error_seconds: float
+
+    @property
+    def offset_within_tolerance(self) -> bool:
+        return abs(self.offset_error_seconds) <= self.allowed_offset_error_seconds
+
+
+@dataclass(frozen=True)
 class SampleBenchmarkResult:
     sample_id: str
     category: str
@@ -353,6 +372,48 @@ def compare_note_sequences(
             [abs(reference[i].pitch - predicted[j].pitch) for i, j in onset_aligned_pairs]
         ),
     )
+
+
+def collect_note_timing_errors(
+    reference: list[TimedMidiNote],
+    predicted: list[TimedMidiNote],
+    *,
+    onset_tolerance_seconds: float = 0.05,
+    offset_tolerance_seconds: float = 0.05,
+    offset_tolerance_ratio: float = 0.2,
+) -> list[NoteTimingError]:
+    """Return signed timing errors for every onset+pitch matched pair.
+
+    Errors are ``predicted - reference``, so a positive duration error means the
+    prediction held the note too long. Unmatched reference or predicted notes are
+    excluded: they are counted by recall and precision, not by timing accuracy.
+    """
+    pairs = _match_notes(
+        reference,
+        predicted,
+        onset_tolerance_seconds=onset_tolerance_seconds,
+        require_pitch=True,
+        require_offset=False,
+        offset_tolerance_seconds=offset_tolerance_seconds,
+        offset_tolerance_ratio=offset_tolerance_ratio,
+    )
+    errors: list[NoteTimingError] = []
+    for reference_index, predicted_index in pairs:
+        expected = reference[reference_index]
+        actual = predicted[predicted_index]
+        errors.append(
+            NoteTimingError(
+                reference_duration_seconds=expected.duration_seconds,
+                onset_error_seconds=actual.onset_seconds - expected.onset_seconds,
+                duration_error_seconds=actual.duration_seconds - expected.duration_seconds,
+                offset_error_seconds=actual.offset_seconds - expected.offset_seconds,
+                allowed_offset_error_seconds=max(
+                    offset_tolerance_seconds,
+                    expected.duration_seconds * offset_tolerance_ratio,
+                ),
+            )
+        )
+    return errors
 
 
 def compare_reference_candidates(
