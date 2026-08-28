@@ -1,6 +1,6 @@
 # Abachiwave 当前状态
 
-> 快照日期：2026-08-23
+> 快照日期：2026-08-24
 >
 > 本文只记录当前已证明的实现和风险；后续工作见 [`roadmap.md`](roadmap.md)。
 
@@ -85,18 +85,25 @@ no-offset F1：留出集补满 0.163 缺口即可从 0.410 到 0.572，确实能
 任何强到有意义的变换都使指标下降。结论：止音缺口真实，但收回它需要逐音符声学证据而非后处理，
 这条线索关闭，替代 Provider 比较是唯一剩余路径。
 
+2026-08-24 把剩余缺口分解到失败类型，并否掉第一个替代候选。约 42% 的参考音符没有对应起音，
+其中近一半是被同音高长音符盖住的**欠切分**而非漏检（开发集 611 未匹配中 276 合并、262 未覆盖）。
+起音召回 0.58–0.60 是当前约束条件。四族纯后处理全部无效（止音变换 +0.002、单声部消解 −0.006 至
+−0.003、pYIN 重指派音高 +0.002、pYIN 引导切分 −0.000）。pYIN + 音符分割管线开发集调到头是
+0.467/0.332，落后 Basic Pitch 0.090/0.062；但给定 oracle 边界时 pYIN 音高能到 0.814/0.811，说明
+瓶颈是音符分割不是 f0——换 f0 估计器无用，需要学习到的切分模型。
+
 这些结果是模型选择证据，不是正式 release gate。详细口径见
 [`audio-to-midi-benchmark.md`](audio-to-midi-benchmark.md)。
 
 ## 5. 当前验证证据
 
-2026-08-22 完成完整验证矩阵；2026-08-23 的止音分析只改动 Python 与文档，因此当日重跑了后端三项
-（ruff / mypy / pytest），前端与 Compose/e2e 行沿用 2026-08-22 的结果：
+2026-08-22 完成完整验证矩阵；2026-08-23 与 2026-08-24 的评测分析只改动 Python 与文档，因此重跑了
+后端三项（ruff / mypy / pytest），前端与 Compose/e2e 行沿用 2026-08-22 的结果：
 
 ```text
 uv run ruff check .              passed
 uv run mypy                      148 source files, no issues
-uv run pytest -q                 236 passed
+uv run pytest -q                 239 passed
 uv run alembic heads             202608100001 (head)
 npm run lint                     passed
 npm run typecheck                passed
