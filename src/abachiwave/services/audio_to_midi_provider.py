@@ -8,6 +8,7 @@ import httpx
 from mido import Message, MetaMessage, MidiFile, MidiTrack, bpm2tempo
 
 from abachiwave.core.config import Settings, get_settings
+from abachiwave.models.audio import AudioUploadKind
 from abachiwave.schemas.song_specs import SongSpecData
 from abachiwave.services.midi import TICKS_PER_BEAT
 
@@ -171,6 +172,75 @@ class BasicPitchHttpAudioToMidiProvider:
         )
 
 
+class YourMT3VocalPipelineProvider:
+    """HTTP adapter for the isolated YourMT3 vocal transcription pipeline.
+
+    Monophonic vocal input only. The pipeline resolves one pitch per instant, so on
+    polyphonic material its offset F1 collapses from 0.769 to 0.077; callers route to
+    it by upload kind rather than using it as a general default. See
+    docs/audio-to-midi-benchmark.md section 12.
+    """
+
+    name = "yourmt3_vocal_pipeline"
+    version = "0.2.0"
+
+    def __init__(
+        self,
+        service_url: str,
+        *,
+        timeout_seconds: float,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._service_url = service_url.rstrip("/")
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport
+
+    def default_params(self) -> dict[str, object]:
+        return dict[str, object](yourmt3_default_params())
+
+    def extract_midi(self, request: AudioToMidiRequest) -> GeneratedMidi:
+        params = resolve_yourmt3_params(request.provider_params)
+        form = {
+            "duration_scale": str(params["duration_scale"]),
+            "use_pyin_pitch": "true" if params["use_pyin_pitch"] else "false",
+        }
+        try:
+            with httpx.Client(
+                timeout=self._timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                response = client.post(
+                    f"{self._service_url}/v1/transcriptions",
+                    data=form,
+                    files={"file": (request.filename, request.audio_bytes, "audio/wav")},
+                )
+        except httpx.TimeoutException as exc:
+            raise AudioToMidiProviderTimeoutError("YourMT3 service timed out") from exc
+        except httpx.RequestError as exc:
+            raise AudioToMidiProviderUnavailableError("YourMT3 service is unavailable") from exc
+        if response.status_code != 200:
+            raise AudioToMidiProviderResponseError(
+                f"YourMT3 service returned HTTP {response.status_code}"
+            )
+        if response.headers.get("X-MT3-Infer-Version") != self.version:
+            raise AudioToMidiProviderResponseError(
+                "YourMT3 service version does not match the run"
+            )
+        if not response.content.startswith(b"MThd"):
+            raise AudioToMidiProviderResponseError("YourMT3 service returned invalid MIDI")
+        return GeneratedMidi(
+            data=response.content,
+            filename=f"{_filename_stem(request.filename)}-yourmt3-melody.mid",
+            provider_name=self.name,
+            provider_version=self.version,
+            provider_params=dict[str, object](params),
+            provider_usage={
+                "note_count": _optional_non_negative_int(response.headers.get("X-Note-Count")),
+                "service_runtime": response.headers.get("X-Model-Runtime", "unknown"),
+            },
+        )
+
+
 def build_audio_to_midi_provider(
     settings: Settings | None = None,
     *,
@@ -185,7 +255,52 @@ def build_audio_to_midi_provider(
             resolved_settings.basic_pitch_service_url,
             timeout_seconds=resolved_settings.basic_pitch_timeout_seconds,
         )
+    if name == YourMT3VocalPipelineProvider.name:
+        return YourMT3VocalPipelineProvider(
+            resolved_settings.yourmt3_service_url,
+            timeout_seconds=resolved_settings.yourmt3_timeout_seconds,
+        )
     raise UnknownAudioToMidiProviderError(f"Unknown audio-to-MIDI provider: {name}")
+
+
+def resolve_audio_to_midi_provider_name(
+    upload_kind: str,
+    settings: Settings | None = None,
+) -> str:
+    """Pick the provider for one upload kind.
+
+    Only hummed vocal input has held-out evidence for an alternative provider, and the
+    vocal pipeline is unusable on polyphonic material, so routing is deliberately narrow:
+    one kind may be redirected, everything else keeps the configured default.
+    """
+    resolved_settings = settings or get_settings()
+    routed = resolved_settings.humming_audio_to_midi_provider_name.strip()
+    if routed and upload_kind == AudioUploadKind.humming:
+        return routed
+    return resolved_settings.audio_to_midi_provider_name
+
+
+def yourmt3_default_params() -> dict[str, bool | float]:
+    return {
+        # 0.85 selected on singer-isolated Vocadito development groups and confirmed on the
+        # holdout groups; YourMT3's note durations run long by a biased +29 to +40 ms.
+        # pYIN supplies pitch because YourMT3 is right on only ~70% of onset-aligned notes
+        # against Basic Pitch's 88-92%. See docs/audio-to-midi-benchmark.md section 12.3.
+        "duration_scale": 0.85,
+        "use_pyin_pitch": True,
+    }
+
+
+def resolve_yourmt3_params(overrides: dict[str, object]) -> dict[str, bool | float]:
+    defaults = yourmt3_default_params()
+    unknown = sorted(set(overrides) - set(defaults))
+    if unknown:
+        raise ValueError(f"unknown YourMT3 provider parameters: {unknown}")
+    params: dict[str, object] = {**defaults, **overrides}
+    return {
+        "duration_scale": _bounded_float_param(params, "duration_scale", 0.01, 2.0),
+        "use_pyin_pitch": _bool_param(params, "use_pyin_pitch"),
+    }
 
 
 def basic_pitch_default_params() -> dict[str, bool | float]:

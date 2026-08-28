@@ -34,6 +34,23 @@ class Settings(BaseSettings):
         le=1800,
         validation_alias="BASIC_PITCH_TIMEOUT_SECONDS",
     )
+    yourmt3_service_url: str = Field(
+        "http://yourmt3:8080",
+        validation_alias="YOURMT3_SERVICE_URL",
+    )
+    yourmt3_timeout_seconds: float = Field(
+        # A median RTF of 0.82 on CPU with a P95 of 1.12 means a three-minute upload can
+        # take over three minutes to transcribe. See docs/audio-to-midi-benchmark.md 12.4.
+        600.0,
+        gt=0,
+        le=3600,
+        validation_alias="YOURMT3_TIMEOUT_SECONDS",
+    )
+    humming_audio_to_midi_provider_name: str = Field(
+        # Empty means no routing: every upload kind uses audio_to_midi_provider_name.
+        "",
+        validation_alias="HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME",
+    )
     database_url: str = Field(
         "postgresql+asyncpg://abachiwave:abachiwave@localhost:5432/abachiwave",
         validation_alias="DATABASE_URL",
@@ -120,6 +137,7 @@ class Settings(BaseSettings):
         "ffmpeg_binary",
         "audio_to_midi_provider_name",
         "basic_pitch_service_url",
+        "yourmt3_service_url",
     )
     @classmethod
     def require_non_empty(cls, value: str) -> str:
@@ -141,6 +159,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TASK_TIMEOUT_SECONDS must be at least 15 seconds greater than "
                 "TEXT_PROVIDER_TIMEOUT_SECONDS"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_yourmt3_timeout_headroom(self) -> "Settings":
+        if (
+            self.humming_audio_to_midi_provider_name == "yourmt3_vocal_pipeline"
+            and self.task_timeout_seconds < self.yourmt3_timeout_seconds + 15
+        ):
+            raise ValueError(
+                "TASK_TIMEOUT_SECONDS must be at least 15 seconds greater than "
+                "YOURMT3_TIMEOUT_SECONDS"
             )
         return self
 

@@ -181,6 +181,28 @@ services:
       timeout: 5s
       retries: 18
 
+  yourmt3:
+    profiles: ["yourmt3"]
+    build:
+      context: .
+      dockerfile: Dockerfile.yourmt3
+    environment:
+      YOURMT3_MAX_AUDIO_BYTES: 26214400
+      YOURMT3_EXPECTED_VERSION: "0.2.0"
+      YOURMT3_DEVICE: cpu
+    volumes:
+      # The 536 MB checkpoint is not redistributed in this repository. Fetch it once per
+      # machine (see docs/audio-to-midi-benchmark.md section 12.1) and mount it read-only;
+      # the service verifies its SHA-256 before loading the weights.
+      - ${YOURMT3_CHECKPOINT_DIR:-./models}:/models:ro
+    ports:
+      - "127.0.0.1:8011:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+
   ffmpeg-worker:
     profiles: ["ffmpeg"]
     build:

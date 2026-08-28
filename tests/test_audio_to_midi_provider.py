@@ -15,9 +15,13 @@ from abachiwave.services.audio_to_midi_provider import (
     BasicPitchHttpAudioToMidiProvider,
     LocalMonophonicWavToMidiProvider,
     UnknownAudioToMidiProviderError,
+    YourMT3VocalPipelineProvider,
     basic_pitch_default_params,
     build_audio_to_midi_provider,
+    resolve_audio_to_midi_provider_name,
     resolve_basic_pitch_params,
+    resolve_yourmt3_params,
+    yourmt3_default_params,
 )
 from abachiwave.services.midi_document import parse_midi_document
 
@@ -214,3 +218,104 @@ def _midi_bytes() -> bytes:
     buffer = BytesIO()
     midi.save(file=buffer)
     return buffer.getvalue()
+
+
+def test_yourmt3_provider_sends_pipeline_params_and_returns_midi() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.url == "http://yourmt3.test/v1/transcriptions"
+        assert b'name="duration_scale"' in request.content
+        assert b"0.9" in request.content
+        assert b'name="use_pyin_pitch"' in request.content
+        assert b"true" in request.content
+        return httpx.Response(
+            200,
+            content=_midi_bytes(),
+            headers={
+                "X-MT3-Infer-Version": "0.2.0",
+                "X-Note-Count": "1",
+                "X-Model-Runtime": "cpu",
+            },
+        )
+
+    provider = YourMT3VocalPipelineProvider(
+        "http://yourmt3.test/",
+        timeout_seconds=30,
+        transport=httpx.MockTransport(handler),
+    )
+    generated = provider.extract_midi(
+        AudioToMidiRequest(
+            audio_bytes=b"RIFF fixture WAVE",
+            filename="hum.wav",
+            song_spec=_song_spec(),
+            provider_params={"duration_scale": 0.9},
+        )
+    )
+
+    assert len(requests) == 1
+    assert generated.provider_name == "yourmt3_vocal_pipeline"
+    assert generated.provider_params == {"duration_scale": 0.9, "use_pyin_pitch": True}
+    assert generated.provider_usage["note_count"] == 1
+    assert generated.filename == "hum-yourmt3-melody.mid"
+    assert generated.data.startswith(b"MThd")
+
+
+def test_yourmt3_provider_rejects_a_version_mismatch() -> None:
+    def wrong_version(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=_midi_bytes(), headers={"X-MT3-Infer-Version": "0.1.0"}
+        )
+
+    provider = YourMT3VocalPipelineProvider(
+        "http://yourmt3.test",
+        timeout_seconds=5,
+        transport=httpx.MockTransport(wrong_version),
+    )
+
+    with pytest.raises(AudioToMidiProviderResponseError):
+        provider.extract_midi(
+            AudioToMidiRequest(
+                audio_bytes=b"RIFF fixture WAVE",
+                filename="hum.wav",
+                song_spec=_song_spec(),
+                provider_params={},
+            )
+        )
+
+
+def test_yourmt3_default_params_carry_the_selected_duration_scale() -> None:
+    assert yourmt3_default_params() == {"duration_scale": 0.85, "use_pyin_pitch": True}
+    assert resolve_yourmt3_params({"duration_scale": 0.7})["duration_scale"] == 0.7
+    with pytest.raises(ValueError, match="unknown YourMT3 provider parameters"):
+        resolve_yourmt3_params({"onset_threshold": 0.6})
+
+
+def test_provider_routing_only_redirects_humming_uploads() -> None:
+    routed = Settings(
+        AUDIO_TO_MIDI_PROVIDER_NAME="spotify_basic_pitch",
+        HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME="yourmt3_vocal_pipeline",
+        TASK_TIMEOUT_SECONDS=900,
+    )
+
+    assert resolve_audio_to_midi_provider_name("humming", routed) == "yourmt3_vocal_pipeline"
+    for kind in ("reference", "scratch", "other"):
+        assert resolve_audio_to_midi_provider_name(kind, routed) == "spotify_basic_pitch"
+
+
+def test_provider_routing_is_inert_until_configured() -> None:
+    unrouted = Settings(AUDIO_TO_MIDI_PROVIDER_NAME="spotify_basic_pitch")
+
+    for kind in ("humming", "reference", "scratch", "other"):
+        assert resolve_audio_to_midi_provider_name(kind, unrouted) == "spotify_basic_pitch"
+
+
+def test_build_audio_to_midi_provider_returns_the_vocal_pipeline() -> None:
+    provider = build_audio_to_midi_provider(
+        Settings(YOURMT3_SERVICE_URL="http://yourmt3.test"),
+        provider_name="yourmt3_vocal_pipeline",
+    )
+
+    assert isinstance(provider, YourMT3VocalPipelineProvider)
+    assert provider.name == "yourmt3_vocal_pipeline"

@@ -67,3 +67,6 @@ docs/*
 docs/plans/*
 !docs/plans/00-status-and-roadmap.md
 !docs/plans/02-full-product.md
+
+# Mounted model weights for the YourMT3 sidecar; never redistributed from here.
+models/

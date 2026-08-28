@@ -36,6 +36,7 @@ from abachiwave.services.audio_to_midi_provider import (
     AudioToMidiProviderError,
     AudioToMidiRequest,
     build_audio_to_midi_provider,
+    resolve_audio_to_midi_provider_name,
 )
 from abachiwave.services.composition import create_midi_asset_version_from_bytes
 from abachiwave.services.events import add_project_event
@@ -348,7 +349,11 @@ async def create_audio_to_midi_run(
         if analysis_conflict is not None:
             return AudioToMidiCreateResult(run=None, conflict=analysis_conflict)
 
-    selected_provider = provider or build_audio_to_midi_provider()
+    # Routed by upload kind: only hummed vocal input has held-out evidence for an
+    # alternative provider, and that pipeline is unusable on polyphonic material.
+    selected_provider = provider or build_audio_to_midi_provider(
+        provider_name=resolve_audio_to_midi_provider_name(str(upload.kind))
+    )
     run = GenerationRun(
         project_id=str(project_id),
         run_type=GenerationRunType.audio_to_midi,

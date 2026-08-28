@@ -1,0 +1,16 @@
+# Versions verified together on CPU; see docs/audio-to-midi-benchmark.md section 12.1.
+# transformers is pinned exactly: mt3-infer declares only >=4.35.0, but the vendored
+# YourMT3 code fails on 4.57 (T5 attention requires cache_position) and on 5.x
+# (transformers.utils.model_parallel_utils was removed). Upstream pins 4.45.1.
+--extra-index-url https://download.pytorch.org/whl/cpu
+mt3-infer[torch]==0.2.0
+transformers==4.45.1
+tokenizers==0.20.3
+torch==2.13.0
+torchaudio==2.11.0
+librosa==0.11.0
+soundfile==0.13.1
+mido==1.3.3
+fastapi==0.139.0
+python-multipart==0.0.32
+uvicorn[standard]==0.50.2
