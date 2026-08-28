@@ -30,8 +30,10 @@ import httpx
 from abachiwave.evaluations.audio_to_midi import (
     AudioToMidiBenchmarkManifest,
     BenchmarkSample,
+    MissedNoteBreakdown,
     NoteTimingError,
     TimedMidiNote,
+    classify_missed_reference_notes,
     collect_note_timing_errors,
     compare_reference_candidates,
     parse_timed_midi_notes,
@@ -49,6 +51,7 @@ from abachiwave.services.audio_to_midi_provider import (
 MINIMUM_TRANSFORMED_DURATION_SECONDS = 0.010
 DURATION_SCALE_GRID = (0.50, 0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.05, 1.10, 1.20, 1.30)
 DURATION_SHIFT_GRID_MS = (-150, -120, -100, -80, -60, -40, -20, 20, 40, 60, 80)
+MONOPHONIC_RULES = ("keep_longest", "keep_loudest", "truncate_at_next_onset")
 
 Transform = Callable[[list[TimedMidiNote]], list[TimedMidiNote]]
 
@@ -77,6 +80,49 @@ def shift_durations(notes: list[TimedMidiNote], seconds: float) -> list[TimedMid
         )
         for note in notes
     ]
+
+
+def enforce_monophony(notes: list[TimedMidiNote], rule: str) -> list[TimedMidiNote]:
+    """Remove or clip overlapping notes.
+
+    Only meaningful on a monophonic dataset, where every overlap in the prediction is
+    an error by construction. ``truncate_at_next_onset`` keeps every note and only
+    clips its offset; the two ``keep_*`` rules drop the losing note outright.
+    """
+    if rule not in MONOPHONIC_RULES:
+        raise ValueError(f"unknown monophonic rule: {rule}")
+    ordered = sorted(notes, key=lambda note: (note.onset_seconds, note.pitch))
+    if rule == "truncate_at_next_onset":
+        clipped: list[TimedMidiNote] = []
+        for index, note in enumerate(ordered):
+            offset = note.offset_seconds
+            for later in ordered[index + 1 :]:
+                if later.onset_seconds > note.onset_seconds:
+                    offset = min(offset, later.onset_seconds)
+                    break
+            clipped.append(
+                TimedMidiNote(
+                    pitch=note.pitch,
+                    onset_seconds=note.onset_seconds,
+                    offset_seconds=max(
+                        note.onset_seconds + MINIMUM_TRANSFORMED_DURATION_SECONDS, offset
+                    ),
+                    velocity=note.velocity,
+                )
+            )
+        return clipped
+
+    def rank(note: TimedMidiNote) -> float:
+        return note.duration_seconds if rule == "keep_longest" else float(note.velocity)
+
+    kept: list[TimedMidiNote] = []
+    for note in sorted(ordered, key=lambda item: (item.onset_seconds, -item.velocity)):
+        if kept and note.onset_seconds < kept[-1].offset_seconds:
+            if rank(note) > rank(kept[-1]):
+                kept[-1] = note
+            continue
+        kept.append(note)
+    return sorted(kept, key=lambda note: (note.onset_seconds, note.pitch, note.offset_seconds))
 
 
 class SamplePrediction:
@@ -259,11 +305,37 @@ def describe_timing_errors(errors: Sequence[NoteTimingError]) -> dict[str, objec
     }
 
 
+def summarise_missed_notes(breakdowns: Sequence[MissedNoteBreakdown]) -> dict[str, object]:
+    """Pool the per-sample recall breakdowns into one classification of the misses."""
+    reference_notes = sum(item.reference_notes for item in breakdowns)
+    onset_matched = sum(item.onset_matched for item in breakdowns)
+    merged = sum(item.merged_into_same_pitch for item in breakdowns)
+    covered = sum(item.covered_by_other_pitch for item in breakdowns)
+    undetected = sum(item.undetected for item in breakdowns)
+    missed = reference_notes - onset_matched
+
+    def share(count: int) -> float | None:
+        return count / missed if missed else None
+
+    return {
+        "reference_notes": reference_notes,
+        "onset_matched": onset_matched,
+        "onset_recall": onset_matched / reference_notes if reference_notes else 0.0,
+        "missed": missed,
+        "merged_into_same_pitch": merged,
+        "covered_by_other_pitch": covered,
+        "undetected": undetected,
+        "merged_share_of_missed": share(merged),
+        "undetected_share_of_missed": share(undetected),
+    }
+
+
 def analyse_partition(
     manifest: AudioToMidiBenchmarkManifest,
     predictions: Sequence[SamplePrediction],
 ) -> dict[str, object]:
     errors: list[NoteTimingError] = []
+    breakdowns: list[MissedNoteBreakdown] = []
     for prediction in predictions:
         selected, _metrics = compare_reference_candidates(
             prediction.references,
@@ -273,9 +345,19 @@ def analyse_partition(
             offset_tolerance_seconds=manifest.offset_tolerance_seconds,
             offset_tolerance_ratio=manifest.offset_tolerance_ratio,
         )
+        reference = dict(prediction.references)[selected]
         errors.extend(
             collect_note_timing_errors(
-                dict(prediction.references)[selected],
+                reference,
+                prediction.predicted,
+                onset_tolerance_seconds=manifest.onset_tolerance_seconds,
+                offset_tolerance_seconds=manifest.offset_tolerance_seconds,
+                offset_tolerance_ratio=manifest.offset_tolerance_ratio,
+            )
+        )
+        breakdowns.append(
+            classify_missed_reference_notes(
+                reference,
                 prediction.predicted,
                 onset_tolerance_seconds=manifest.onset_tolerance_seconds,
                 offset_tolerance_seconds=manifest.offset_tolerance_seconds,
@@ -314,6 +396,19 @@ def analyse_partition(
                 - baseline_offset_f1,
             }
         )
+    for rule in MONOPHONIC_RULES:
+        scored = score_partition(
+            manifest, predictions, lambda notes, rule=rule: enforce_monophony(notes, rule)
+        )
+        transforms.append(
+            {
+                "transform": "monophonic_resolution",
+                "value": rule,
+                **scored,
+                "macro_offset_f1_delta": float(scored["macro_onset_pitch_offset_f1"])
+                - baseline_offset_f1,
+            }
+        )
     best = max(transforms, key=lambda row: float(row["macro_onset_pitch_offset_f1"]))
     best_delta = float(best["macro_offset_f1_delta"])
     return {
@@ -321,6 +416,7 @@ def analyse_partition(
         "perfect_offset_layer_ceiling": float(identity["macro_onset_pitch_f1"]),
         "offset_gap": float(identity["macro_onset_pitch_f1"]) - baseline_offset_f1,
         "timing_errors": describe_timing_errors(errors),
+        "missed_notes": summarise_missed_notes(breakdowns),
         "transforms": transforms,
         "best_transform": (
             {"transform": "identity", "value": None, "macro_offset_f1_delta": 0.0}

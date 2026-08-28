@@ -14,6 +14,7 @@ from abachiwave.evaluations.audio_to_midi import (
     SampleBenchmarkResult,
     TimedMidiNote,
     aggregate_benchmark_results,
+    classify_missed_reference_notes,
     collect_note_timing_errors,
     compare_note_sequences,
     compare_reference_candidates,
@@ -333,3 +334,44 @@ def test_collect_note_timing_errors_excludes_unmatched_notes() -> None:
 
     assert len(errors) == 1
     assert errors[0].onset_error_seconds == pytest.approx(0.01)
+
+
+def test_classify_missed_reference_notes_separates_merged_from_undetected() -> None:
+    reference = [
+        _note(60, 0.0, 0.4),
+        _note(60, 0.4, 0.8),
+        _note(62, 2.0, 2.4),
+        _note(64, 5.0, 5.4),
+    ]
+    predicted = [
+        _note(60, 0.0, 0.8),
+        _note(67, 2.0, 2.4),
+    ]
+
+    breakdown = classify_missed_reference_notes(reference, predicted)
+
+    assert breakdown.reference_notes == 4
+    assert breakdown.onset_matched == 2
+    assert breakdown.missed == 2
+    assert breakdown.merged_into_same_pitch == 1
+    assert breakdown.undetected == 1
+    assert breakdown.covered_by_other_pitch == 0
+
+
+def test_classify_missed_reference_notes_counts_wrong_pitch_coverage() -> None:
+    reference = [_note(60, 0.0, 0.4), _note(62, 0.4, 0.8)]
+    predicted = [_note(67, 0.0, 0.8)]
+
+    breakdown = classify_missed_reference_notes(reference, predicted)
+
+    assert breakdown.onset_matched == 1
+    assert breakdown.covered_by_other_pitch == 1
+    assert breakdown.merged_into_same_pitch == 0
+    assert breakdown.undetected == 0
+
+
+def test_classify_missed_reference_notes_ignores_pitch_when_matching_onsets() -> None:
+    breakdown = classify_missed_reference_notes([_note(60, 0.0, 0.4)], [_note(72, 0.01, 0.4)])
+
+    assert breakdown.onset_matched == 1
+    assert breakdown.missed == 0

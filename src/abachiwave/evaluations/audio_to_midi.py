@@ -64,6 +64,28 @@ class NoteTimingError:
 
 
 @dataclass(frozen=True)
+class MissedNoteBreakdown:
+    """Why reference notes had no predicted onset within tolerance.
+
+    Recall alone cannot separate "the transcriber never fired here" from "the
+    transcriber held one long note across several reference notes". The two call for
+    different fixes, so they are counted separately. A reference note counts as
+    ``merged_into_same_pitch`` when some predicted note of the same pitch covers its
+    midpoint -- the pitch was found, the re-articulation was not.
+    """
+
+    reference_notes: int
+    onset_matched: int
+    merged_into_same_pitch: int
+    covered_by_other_pitch: int
+    undetected: int
+
+    @property
+    def missed(self) -> int:
+        return self.reference_notes - self.onset_matched
+
+
+@dataclass(frozen=True)
 class SampleBenchmarkResult:
     sample_id: str
     category: str
@@ -414,6 +436,57 @@ def collect_note_timing_errors(
             )
         )
     return errors
+
+
+def classify_missed_reference_notes(
+    reference: list[TimedMidiNote],
+    predicted: list[TimedMidiNote],
+    *,
+    onset_tolerance_seconds: float = 0.05,
+    offset_tolerance_seconds: float = 0.05,
+    offset_tolerance_ratio: float = 0.2,
+) -> MissedNoteBreakdown:
+    """Split the recall loss into under-segmentation and outright misses.
+
+    Onset matching here ignores pitch, so a reference note counts as matched whenever
+    any predicted note starts close enough to it. The remainder are classified by what,
+    if anything, covers their midpoint.
+    """
+    matched = {
+        reference_index
+        for reference_index, _predicted_index in _match_notes(
+            reference,
+            predicted,
+            onset_tolerance_seconds=onset_tolerance_seconds,
+            require_pitch=False,
+            require_offset=False,
+            offset_tolerance_seconds=offset_tolerance_seconds,
+            offset_tolerance_ratio=offset_tolerance_ratio,
+        )
+    }
+    merged = covered = undetected = 0
+    for reference_index, expected in enumerate(reference):
+        if reference_index in matched:
+            continue
+        midpoint = (expected.onset_seconds + expected.offset_seconds) / 2
+        covering = [
+            actual
+            for actual in predicted
+            if actual.onset_seconds <= midpoint <= actual.offset_seconds
+        ]
+        if not covering:
+            undetected += 1
+        elif any(actual.pitch == expected.pitch for actual in covering):
+            merged += 1
+        else:
+            covered += 1
+    return MissedNoteBreakdown(
+        reference_notes=len(reference),
+        onset_matched=len(matched),
+        merged_into_same_pitch=merged,
+        covered_by_other_pitch=covered,
+        undetected=undetected,
+    )
 
 
 def compare_reference_candidates(
