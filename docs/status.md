@@ -1,6 +1,6 @@
 # Abachiwave 当前状态
 
-> 快照日期：2026-08-25
+> 快照日期：2026-08-26
 >
 > 本文只记录当前已证明的实现和风险；后续工作见 [`roadmap.md`](roadmap.md)。
 
@@ -119,13 +119,14 @@ Vocano 约 0.64/0.50，Basic Pitch 0.561/0.398。**no-offset 已超过 Vocano**�
 
 ## 5. 当前验证证据
 
-2026-08-22 完成完整验证矩阵；2026-08-23 与 2026-08-24 的评测分析只改动 Python 与文档，因此重跑了
-后端三项（ruff / mypy / pytest），前端与 Compose/e2e 行沿用 2026-08-22 的结果：
+2026-08-22 完成完整验证矩阵。2026-08-26 的改动触及 audio-to-MIDI 创建路径，因此重跑了后端三项
+与 Compose smoke（真实栈：postgres / redis / minio / api / worker / audio-midi-worker / basic-pitch
+全部 healthy，smoke 返回 ok）；前端与 e2e 行沿用 2026-08-22 的结果：
 
 ```text
 uv run ruff check .              passed
 uv run mypy                      148 source files, no issues
-uv run pytest -q                 239 passed
+uv run pytest -q                 242 passed
 uv run alembic heads             202608100001 (head)
 npm run lint                     passed
 npm run typecheck                passed
@@ -152,6 +153,9 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 
 2026-08-23 `support/analyze_audio_to_midi_offsets.py` 在同一 sidecar 上对 40 条 Vocadito 重新推理，
 `identity` 在开发集与留出集分别复现出 0.557/0.394 与 0.572/0.410，与第 4 节记录一致。
+
+2026-08-26 `input_manifest` 增加 `audio_upload_kind` 后在真实栈复核：本次 smoke 产生的 run 记录该字段
+为 `humming`，改动前的历史 run 该字段为空——加性、向后兼容、旧记录不受影响。
 
 `ffmpeg` profile 下对 MP3、M4A、FLAC、OGG 各上传一份真实压缩音频：格式识别正确，派生统一为
 48 kHz、双声道、16-bit PCM WAV，派生 `source_checksum` 指回源文件，原始文件下载后与上传字节
