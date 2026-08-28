@@ -207,6 +207,21 @@ uv run python support/benchmark_audio_to_midi.py \
 261.73%、内存 716.3 MiB。所有参考音高均被命中，
 但 14 个参考音产生了 48 个预测音，主要风险是持续音、泛音和音色变化导致的额外音符/过分段。
 
+2026-08-26 在同一子集上运行 YourMT3+（`onset` 无关，直接取全部 program）：
+
+| Scope | 参考/预测音符 | macro no-offset/offset F1 | 起音召回 |
+| --- | ---: | ---: | ---: |
+| overall | 14 / **1** | 0.071 / 0.000 | 0.071 |
+| monophonic_instrumental | 12 / 1 | 0.083 / 0.000 | 0.083 |
+| vocal | 2 / 0 | 0.000 / 0.000 | 0.000 |
+
+**YourMT3 在 14 条上总共只输出 1 个音符。** NSynth 是采样库的孤立持续音，没有节奏与和声上下文，
+完全落在这个序列模型的训练分布之外；Basic Pitch 是逐帧模型，孤立音能出（虽然过分割成 48 个）。
+NSynth 不在 MT3 训练混合中（完整清单：guitarset / maestro / maps / mir_st500 / musicnet / slakh /
+urmp / egmd / enstdrums / idmt_smt_bass / rwc_pop / geerdes / cmedia），因此这是无污染证据，
+支持器乐路径保持 Basic Pitch。但它只覆盖孤立音，**不能**据此判断器乐乐句——那需要一个既是乐句级
+又不在 MT3 训练混合中的数据集。中位 RTF 0.72。
+
 这组数据是 sample-library 的 isolated held notes，不是乐句、人声演唱段或复调音乐。3 秒 offset 来自
 数据集生成约定，不是人工逐帧标注的声学终点，不能单独用来给产品设 offset 发布阈值。下一轮正式
 门禁仍需补充可许可的乐句级单旋律、人声和复调对齐集，并人工复核失败样例。
