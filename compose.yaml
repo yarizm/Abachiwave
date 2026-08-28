@@ -66,6 +66,9 @@ services:
       AUDIO_TO_MIDI_PROVIDER_NAME: ${AUDIO_TO_MIDI_PROVIDER_NAME:-local_monophonic_wav_to_midi}
       BASIC_PITCH_SERVICE_URL: ${BASIC_PITCH_SERVICE_URL:-http://basic-pitch:8080}
       BASIC_PITCH_TIMEOUT_SECONDS: ${BASIC_PITCH_TIMEOUT_SECONDS:-90}
+      HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME: ${HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME:-}
+      YOURMT3_SERVICE_URL: ${YOURMT3_SERVICE_URL:-http://yourmt3:8080}
+      YOURMT3_TIMEOUT_SECONDS: ${YOURMT3_TIMEOUT_SECONDS:-600}
       DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
@@ -144,6 +147,9 @@ services:
       AUDIO_TO_MIDI_PROVIDER_NAME: ${AUDIO_TO_MIDI_PROVIDER_NAME:-local_monophonic_wav_to_midi}
       BASIC_PITCH_SERVICE_URL: ${BASIC_PITCH_SERVICE_URL:-http://basic-pitch:8080}
       BASIC_PITCH_TIMEOUT_SECONDS: ${BASIC_PITCH_TIMEOUT_SECONDS:-90}
+      HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME: ${HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME:-}
+      YOURMT3_SERVICE_URL: ${YOURMT3_SERVICE_URL:-http://yourmt3:8080}
+      YOURMT3_TIMEOUT_SECONDS: ${YOURMT3_TIMEOUT_SECONDS:-600}
       DATABASE_URL: postgresql+asyncpg://abachiwave:abachiwave@postgres:5432/abachiwave
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
