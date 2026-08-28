@@ -1,6 +1,6 @@
 # Abachiwave 当前状态
 
-> 快照日期：2026-08-26
+> 快照日期：2026-08-27
 >
 > 本文只记录当前已证明的实现和风险；后续工作见 [`roadmap.md`](roadmap.md)。
 
@@ -129,7 +129,7 @@ Vocano 约 0.64/0.50，Basic Pitch 0.561/0.398。**no-offset 已超过 Vocano**�
 ```text
 uv run ruff check .              passed
 uv run mypy                      148 source files, no issues
-uv run pytest -q                 242 passed
+uv run pytest -q                 254 passed
 uv run alembic heads             202608100001 (head)
 npm run lint                     passed
 npm run typecheck                passed
@@ -159,6 +159,14 @@ PostgreSQL、Redis、MinIO、API、Web、通用 Worker、audio MIDI Worker 和 `
 
 2026-08-26 `input_manifest` 增加 `audio_upload_kind` 后在真实栈复核：本次 smoke 产生的 run 记录该字段
 为 `humming`，改动前的历史 run 该字段为空——加性、向后兼容、旧记录不受影响。
+
+2026-08-27 YourMT3 sidecar 上线形态复核。用部署好的容器对同一 40 条 Vocadito 重跑并用
+`support.score_external_midi` 打分，得到 development 0.692/0.467、holdout 0.623/0.441、
+overall 0.675/0.460，与原型数字逐位一致（开发集 offset 差 0.001）。随后开启
+`HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME=yourmt3_vocal_pipeline` 重跑 smoke，run 记录为
+`yourmt3_vocal_pipeline / 0.2.0 / succeeded`，`input_manifest.audio_upload_kind` 为 `humming`，
+`provider_params` 快照 `{"duration_scale": 0.85, "use_pyin_pitch": true}`，`service_runtime` 为 `cpu`。
+sidecar 就绪响应回报校验通过的 checkpoint SHA-256。
 
 `ffmpeg` profile 下对 MP3、M4A、FLAC、OGG 各上传一份真实压缩音频：格式识别正确，派生统一为
 48 kHz、双声道、16-bit PCM WAV，派生 `source_checksum` 指回源文件，原始文件下载后与上传字节
