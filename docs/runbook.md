@@ -42,6 +42,7 @@ docker compose down
 | PostgreSQL | `localhost:5432` | 数据库、用户和密码均为 `abachiwave` |
 | Redis | `localhost:6379` | Arq 队列 |
 | Basic Pitch（可选） | <http://localhost:8010/health/ready> | 隔离的 audio-to-MIDI 推理健康检查 |
+| YourMT3（可选） | <http://localhost:8011/health/ready> | 哼唱专用 audio-to-MIDI 管线，含权重校验 |
 
 ## 3. 健康检查
 
@@ -126,6 +127,28 @@ curl http://localhost:8010/health/ready
 docker compose ps basic-pitch audio-midi-worker api
 docker compose logs -f basic-pitch audio-midi-worker
 ```
+
+要额外为**哼唱**上传启用 YourMT3 管线（其他上传类型不受影响），先把 536 MB 权重放到宿主机目录
+（获取方式见 `docs/audio-to-midi-benchmark.md` 12.1 节），布局为
+`<dir>/yourmt3/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/last.ckpt`，
+然后：
+
+```dotenv
+HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME=yourmt3_vocal_pipeline
+YOURMT3_SERVICE_URL=http://yourmt3:8080
+YOURMT3_TIMEOUT_SECONDS=600
+YOURMT3_CHECKPOINT_DIR=/absolute/path/to/models
+TASK_TIMEOUT_SECONDS=615
+```
+
+```bash
+docker compose --profile yourmt3 up -d --build yourmt3
+curl http://localhost:8011/health/ready
+```
+
+就绪响应会回报校验通过的 `checkpoint_sha256`；权重缺失或哈希不符时服务拒绝启动，不会静默降级。
+该管线中位 RTF 约 2.0（比 Basic Pitch 慢约 87 倍），单实例串行推理，容器稳态内存约 1.4 GiB——
+排 Worker 数与队列积压时按此计算。`HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME` 留空即完全关闭路由。
 
 Basic Pitch 镜像使用独立 Python 3.11 环境，并把 Numba cache 放在非 root 用户可写的 `/tmp`；
 不要把它的模型依赖安装进 API 的 Python 3.12 环境。切回本地 Provider 时修改 `.env` 并重建/重启 `api` 与 `audio-midi-worker`。已经排队的

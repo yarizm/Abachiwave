@@ -18,6 +18,7 @@ flowchart LR
     AM --> P
     AM --> M
     AM --> BP["Optional Basic Pitch Service"]
+    AM --> YM["Optional YourMT3 Service (humming)"]
     FW --> P
     FW --> M
     W --> D["Deterministic Providers"]
@@ -157,7 +158,15 @@ HTTP sidecar 执行模型推理，模型依赖不会进入主 Python 3.12 API/Wo
 启动时加载模型，并用单并发锁控制推理；上传仅接受受大小限制的 WAV，返回值必须同时满足
 服务版本头和 MIDI 文件签名契约。容器为非 root 进程显式提供可写的临时 Numba cache，避免
 Librosa 首次 JIT 初始化依赖只读 site-packages。Basic Pitch 参数先合并默认值并做名称、类型、
-边界及频率范围校验，未知参数明确拒绝，避免 lineage 记录了实际未生效的配置。Provider HTTP
+边界及频率范围校验，未知参数明确拒绝，避免 lineage 记录了实际未生效的配置。
+
+`yourmt3_vocal_pipeline` 是第二个 sidecar，运行 YourMT3 音符边界 + pYIN 音高 + 时长缩放的三部件
+管线。它只对**单声部人声**有效——pYIN 同一时刻只能解析一个音高，复调素材上会崩溃——因此不作为
+全局默认，而是按 `AudioUploadKind` 路由：`HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME` 非空时只有
+`humming` 上传改走它，其余类型保持 `AUDIO_TO_MIDI_PROVIDER_NAME`。路由结果与依据都进 run 记录
+（`provider_name` 与 `input_manifest.audio_upload_kind`），执行侧按 `run.provider_name` 重建 Provider，
+所以配置变更不会改写历史任务。536 MB 权重不随镜像分发，以只读卷挂载，sidecar 在加载前校验
+SHA-256——`mt3-infer` 记录该哈希但下载时不强制校验。Provider HTTP
 超时必须比任务超时至少短 15 秒。
 
 创建 run 时就固定 upload、可选 PCM derivative、可选 reference analysis、两级 checksum、
