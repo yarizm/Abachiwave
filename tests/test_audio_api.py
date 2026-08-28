@@ -689,6 +689,8 @@ async def test_audio_to_midi_worker_creates_melody_midi(
         "start_seconds": 0.0,
         "end_seconds": upload["duration_seconds"],
     }
+    # Provider routing keys off the upload kind, so a finished run has to carry it.
+    assert run["input_manifest"]["audio_upload_kind"] == "humming"
     assert queue.enqueued == [UUID(run["id"])]
 
     executed = await execute_audio_to_midi(
