@@ -147,7 +147,7 @@ curl http://localhost:8011/health/ready
 ```
 
 就绪响应会回报校验通过的 `checkpoint_sha256`；权重缺失或哈希不符时服务拒绝启动，不会静默降级。
-该管线中位 RTF 约 2.0（比 Basic Pitch 慢约 87 倍），单实例串行推理，容器稳态内存约 1.4 GiB——
+该管线中位 RTF 1.50、P95 2.12（比 Basic Pitch 慢约 65 倍），单实例串行推理，容器稳态内存约 1.4 GiB——
 排 Worker 数与队列积压时按此计算。`HUMMING_AUDIO_TO_MIDI_PROVIDER_NAME` 留空即完全关闭路由。
 
 Basic Pitch 镜像使用独立 Python 3.11 环境，并把 Numba cache 放在非 root 用户可写的 `/tmp`；
