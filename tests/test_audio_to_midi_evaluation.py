@@ -18,6 +18,7 @@ from abachiwave.evaluations.audio_to_midi import (
     collect_note_timing_errors,
     compare_note_sequences,
     compare_reference_candidates,
+    count_notes_by_program,
     evaluate_thresholds,
     load_benchmark_manifest,
     parse_timed_midi_notes,
@@ -375,3 +376,38 @@ def test_classify_missed_reference_notes_ignores_pitch_when_matching_onsets() ->
 
     assert breakdown.onset_matched == 1
     assert breakdown.missed == 0
+
+
+def _program_midi() -> bytes:
+    midi = MidiFile(type=1, ticks_per_beat=480)
+    vocal = MidiTrack()
+    vocal.append(Message("program_change", channel=0, program=100, time=0))
+    vocal.append(Message("note_on", channel=0, note=60, velocity=90, time=0))
+    vocal.append(Message("note_off", channel=0, note=60, velocity=0, time=480))
+    midi.tracks.append(vocal)
+    piano = MidiTrack()
+    piano.append(Message("program_change", channel=1, program=0, time=0))
+    piano.append(Message("note_on", channel=1, note=48, velocity=70, time=0))
+    piano.append(Message("note_off", channel=1, note=48, velocity=0, time=960))
+    midi.tracks.append(piano)
+    buffer = BytesIO()
+    midi.save(file=buffer)
+    return buffer.getvalue()
+
+
+def test_parse_timed_midi_notes_keeps_every_program_by_default() -> None:
+    notes = parse_timed_midi_notes(_program_midi())
+
+    assert [note.pitch for note in notes] == [48, 60]
+
+
+def test_parse_timed_midi_notes_filters_on_program() -> None:
+    sung = parse_timed_midi_notes(_program_midi(), programs=frozenset({100, 101}))
+
+    assert [note.pitch for note in sung] == [60]
+    assert sung[0].offset_seconds == pytest.approx(0.5)
+    assert parse_timed_midi_notes(_program_midi(), programs=frozenset({7})) == []
+
+
+def test_count_notes_by_program_reports_each_program() -> None:
+    assert count_notes_by_program(_program_midi()) == {100: 1, 0: 1}

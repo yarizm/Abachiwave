@@ -282,14 +282,25 @@ def load_benchmark_manifest(path: Path) -> AudioToMidiBenchmarkManifest:
     return manifest.model_copy(update={"samples": resolved_samples})
 
 
-def parse_timed_midi_notes(data: bytes) -> list[TimedMidiNote]:
+def parse_timed_midi_notes(
+    data: bytes,
+    *,
+    programs: frozenset[int] | None = None,
+) -> list[TimedMidiNote]:
+    """Parse note events with absolute times, optionally keeping only some programs.
+
+    ``programs`` filters on the MIDI program in effect on the note's channel when it
+    started. Multi-instrument transcribers emit one program per detected instrument, so
+    this is how a single part is isolated. The default keeps every note.
+    """
     from io import BytesIO
 
     midi = MidiFile(file=BytesIO(data))
     ticks_per_beat = midi.ticks_per_beat or 480
     tempo = 500_000
     current_seconds = 0.0
-    active: dict[tuple[int, int], list[tuple[float, int]]] = defaultdict(list)
+    program: dict[int, int] = defaultdict(int)
+    active: dict[tuple[int, int], list[tuple[float, int, int]]] = defaultdict(list)
     notes: list[TimedMidiNote] = []
 
     for message in merge_tracks(midi.tracks):
@@ -297,15 +308,22 @@ def parse_timed_midi_notes(data: bytes) -> list[TimedMidiNote]:
         if message.type == "set_tempo":
             tempo = int(message.tempo)
             continue
+        if message.type == "program_change":
+            program[message.channel] = int(message.program)
+            continue
         if message.type == "note_on" and message.velocity > 0:
-            active[(message.channel, message.note)].append((current_seconds, message.velocity))
+            active[(message.channel, message.note)].append(
+                (current_seconds, message.velocity, program[message.channel])
+            )
             continue
         if message.type not in {"note_off", "note_on"}:
             continue
         key = (message.channel, message.note)
         if not active[key]:
             continue
-        onset_seconds, velocity = active[key].pop(0)
+        onset_seconds, velocity, note_program = active[key].pop(0)
+        if programs is not None and note_program not in programs:
+            continue
         notes.append(
             TimedMidiNote(
                 pitch=message.note,
@@ -316,6 +334,21 @@ def parse_timed_midi_notes(data: bytes) -> list[TimedMidiNote]:
         )
 
     return sorted(notes, key=lambda note: (note.onset_seconds, note.pitch, note.offset_seconds))
+
+
+def count_notes_by_program(data: bytes) -> dict[int, int]:
+    """Count note-on events per MIDI program, for checking what a transcriber emitted."""
+    from io import BytesIO
+
+    midi = MidiFile(file=BytesIO(data))
+    program: dict[int, int] = defaultdict(int)
+    counts: dict[int, int] = defaultdict(int)
+    for message in merge_tracks(midi.tracks):
+        if message.type == "program_change":
+            program[message.channel] = int(message.program)
+        elif message.type == "note_on" and message.velocity > 0:
+            counts[program[message.channel]] += 1
+    return dict(counts)
 
 
 def compare_note_sequences(
