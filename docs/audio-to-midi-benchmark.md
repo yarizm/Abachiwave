@@ -601,8 +601,19 @@ pYIN 是单音 f0 追踪器，同一时刻只能给出一个音高，因此该�
 唯一缺口是 `input_manifest` 未记录 `audio_upload_kind`，而 lineage 要求它必须被记录。
 
 本节的 YourMT3 原型运行在临时 venv（`transformers==4.45.1` + PyTorch CPU），权重存放在仓库外的
-`MT3_CHECKPOINT_DIR`。候选尚未决策，因此原型代码与依赖都未并入仓库；重跑需按第 12.1 节
+`MT3_CHECKPOINT_DIR`。候选尚未决策，因此推理侧代码与依赖都未并入仓库；重跑需按第 12.1 节
 重建环境。
+
+**评分侧是可复现的。** 任何无法与本项目共存的候选（依赖冲突、不同框架、权重不可再分发）都可以
+把结果转录成 `<sample_id>.mid` 目录，再用同一 evaluator、同一容差与参考选择策略打分：
+
+```bash
+uv run python -m support.score_external_midi   path/to/vocadito/manifest.json   --midi-dir path/to/candidate-midi   --group-by partition   --candidate yourmt3-raw   --output path/to/candidate-report.json
+```
+
+目录内可选的 `index.json`（按 sample id 提供 `latency_seconds` 与 `audio_duration_seconds`）
+会被用于时延与 RTF 统计；`--programs` 可只保留指定 MIDI program。该命令对本节的 YourMT3
+输出复现出 development 0.594/0.351、holdout 0.558/0.357、overall 0.585/0.353，与上表一致。
 
 ## 13. 正式放行流程
 
