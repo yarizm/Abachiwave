@@ -574,6 +574,15 @@ pYIN 是单音 f0 追踪器，同一时刻只能给出一个音高，因此该�
 必须按素材类型显式路由，且路由判据本身需要可靠依据——不能用输出的 MIDI program，因为
 第 12.5 节已证明该标签不可用。人声路径与器乐路径的默认 Provider 必须分别记录在 run manifest 中。
 
+现有代码已具备路由所需的全部信号，不需要新 schema：`AudioUploadKind` 的取值就是
+`humming` / `reference` / `scratch` / `other`，由用户在上传时声明；`build_audio_to_midi_provider`
+已接受 `provider_name` 覆盖；`upload` 在 `services/audio.py` 选择 Provider 的位置就在作用域内。
+唯一缺口是 `input_manifest` 未记录 `audio_upload_kind`，而 lineage 要求它必须被记录。
+
+本节的 YourMT3 原型运行在临时 venv（`transformers==4.45.1` + PyTorch CPU），权重存放在仓库外的
+`MT3_CHECKPOINT_DIR`。候选尚未决策，因此原型代码与依赖都未并入仓库；重跑需按第 12.1 节
+重建环境。
+
 ## 13. 正式放行流程
 
 1. 固定数据集版本、许可证、源归档与逐 member checksum 和分类覆盖。
