@@ -2684,6 +2684,13 @@ html[data-theme="light"] .theme-toggle-moon {
     grid-template-columns: 1fr;
   }
 
+  /* The audio-marker form's own .form-row override outranks the base mobile
+     collapse above, so restate it here: its 120px/150px minimum columns do not
+     fit a phone viewport and stretch the document horizontally. */
+  .audio-marker-form .form-row {
+    grid-template-columns: 1fr;
+  }
+
   .structure-heading,
   .structure-footer {
     align-items: flex-start;
