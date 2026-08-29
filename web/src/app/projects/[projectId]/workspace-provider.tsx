@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
+import { FormEvent, ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { useWorkspaceData } from "./hooks/use-workspace-data";
@@ -11,7 +10,6 @@ import { hotkeySubmitAllowed } from "@/lib/form-submit";
 import { useHotkey } from "@/lib/use-hotkey";
 
 import {
-  CollaborationWorkspace,
   buildCommentTargets,
   makeCommentTargetValue,
   parseCommentTarget,
@@ -21,17 +19,8 @@ import type {
   AudioMarkerUpdatePayload,
   AudioUploadUpdatePayload,
 } from "@/components/workspace/audio-workspace";
-import {
-  DeliveryWorkspace,
-  emptyArrangementPlan,
-} from "@/components/workspace/delivery-workspace";
-import { ProjectOverview } from "@/components/workspace/project-overview";
-import { StructureWorkspace } from "@/components/workspace/structure-workspace";
-import {
-  SongSpecDraftForm,
-  SongSpecVersionsPanel,
-  SongSpecWorkspace,
-} from "@/components/workspace/song-spec-workspace";
+import { emptyArrangementPlan } from "@/components/workspace/delivery-workspace";
+import type { SongSpecDraftForm } from "@/components/workspace/song-spec-workspace";
 import { useLocale } from "@/i18n/locale-provider";
 import { fetchJson, fetchNoContent } from "@/lib/api-client";
 import {
@@ -158,47 +147,18 @@ import {
   structureEndpoint,
 } from "@/lib/structure";
 
-const workspaceLoading = () => <div className="workspace-panel-loading" aria-hidden="true" />;
-const AudioWorkspace = dynamic(
-  () => import("@/components/workspace/audio-workspace").then((module) => module.AudioWorkspace),
-  { loading: workspaceLoading },
-);
-const CompositionWorkspace = dynamic(
-  () =>
-    import("@/components/workspace/composition-workspace").then(
-      (module) => module.CompositionWorkspace,
-    ),
-  { loading: workspaceLoading },
-);
-const DemoWorkspace = dynamic(
-  () => import("@/components/workspace/demo-workspace").then((module) => module.DemoWorkspace),
-  { loading: workspaceLoading },
-);
-const RevisionWorkspace = dynamic(
-  () =>
-    import("@/components/workspace/revision-workspace").then(
-      (module) => module.RevisionWorkspace,
-    ),
-  { loading: workspaceLoading },
-);
-const CandidateWorkspace = dynamic(
-  () =>
-    import("@/components/workspace/candidate-workspace").then(
-      (module) => module.CandidateWorkspace,
-    ),
-  { loading: workspaceLoading },
-);
-const CreationChainProgress = dynamic(
-  () =>
-    import("@/components/workspace/creation-chain-progress").then(
-      (module) => module.CreationChainProgress,
-    ),
-  { loading: workspaceLoading },
-);
-
 const apiBaseUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 
-export default function ProjectWorkspaceClient() {
+/**
+ * Every piece of workspace state and every mutation handler, in one hook.
+ *
+ * The workspace used to be a single 22-screen page; it is now eight routes that
+ * share this controller through context, so a handler written against the whole
+ * snapshot keeps working while the panels live on separate pages. The context
+ * value is deliberately wide for now — the per-route data split (each page
+ * loading only its own slice) is the next step, and it thins this down.
+ */
+function useWorkspaceController() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
   const { errorHint: localizedHint, errorMessage, locale, t, text } = useLocale();
@@ -1611,194 +1571,153 @@ export default function ProjectWorkspaceClient() {
     }
   }
 
-  return (
-    <div className="workspace">
-      <ProjectOverview
-        description={projectDescriptionDraft}
-        error={error}
-        errorHint={errorHint}
-        handoff={projectHandoff}
-        isLoading={isLoading}
-        isSaving={pendingActions.isPending("project")}
-        name={projectNameDraft}
-        onDescriptionChange={setProjectDescriptionDraft}
-        onErrorHintAction={loadWorkspace}
-        onNameChange={setProjectNameDraft}
-        onRefresh={loadWorkspace}
-        onStatusToggle={handleProjectStatusToggle}
-        onSubmit={handleProjectSettingsSubmit}
-        project={project}
-        review={projectReview}
-      />
+  return {
+    // identity
+    projectId,
+    // load state
+    isLoading,
+    error,
+    errorHint,
+    loadWorkspace,
+    pendingActions,
+    // project
+    project,
+    projectHandoff,
+    projectReview,
+    projectNameDraft,
+    setProjectNameDraft,
+    projectDescriptionDraft,
+    setProjectDescriptionDraft,
+    handleProjectSettingsSubmit,
+    handleProjectStatusToggle,
+    // creation chain
+    creationStage,
+    // song spec
+    idea,
+    setIdea,
+    answers,
+    setAnswers,
+    draftForm,
+    setDraftForm,
+    latestIntake,
+    activeVersion,
+    approvedVersion,
+    sortedVersions,
+    state,
+    handleIntakeSubmit,
+    handleGenerateDraft,
+    handleSongSpecSubmit,
+    handleApprove,
+    handleStructureChange,
+    // ai candidates
+    candidates,
+    providerProfiles,
+    textRuns,
+    aiLoadErrors,
+    handleGenerateCandidates,
+    handleSelectCandidate,
+    // audio
+    audioUploadFile,
+    setAudioUploadFile,
+    audioUploadKind,
+    setAudioUploadKind,
+    audioUploadNotes,
+    setAudioUploadNotes,
+    sortedAudioUploads,
+    sortedAudioDerivatives,
+    sortedAudioMarkers,
+    sortedReferenceAnalyses,
+    audioRuns,
+    handleAudioUploadSubmit,
+    handleUpdateAudioUpload,
+    handleCreateAudioMarker,
+    handleUpdateAudioMarker,
+    handleDeleteAudioMarker,
+    handleCreateAudioDerivative,
+    handleExtractAudioMidi,
+    handleAnalyzeReference,
+    handleApplyReferenceAnalysis,
+    // composition
+    activeLyrics,
+    activeChords,
+    sortedMidiAssets,
+    melodyAssets,
+    canGenerateAssets,
+    compositionGuardReason,
+    handleGenerateLyrics,
+    handleLyricsSave,
+    handleLyricsRewrite,
+    handleGenerateChords,
+    handleChordsSave,
+    handleChordsPreview,
+    handleChordsTranspose,
+    handleGenerateMidi,
+    handleMidiSave,
+    handleMidiTransform,
+    // delivery
+    assetTree,
+    activeArrangement,
+    arrangementDraft,
+    setArrangementDraft,
+    sortedExports,
+    canGenerateArrangementPlan,
+    canExportProject,
+    arrangementGuardReason,
+    exportGuardReason,
+    handleGenerateArrangement,
+    handleArrangementSubmit,
+    handleCreateExport,
+    // demo
+    sortedDemos,
+    demoRuns,
+    canGenerateDemoVersion,
+    demoGuardReason,
+    handleGenerateDemo,
+    // runs
+    handleRetryRun,
+    handleCancelRun,
+    // revisions
+    revisionFeedback,
+    setRevisionFeedback,
+    sortedRevisions,
+    sortedArrangements,
+    sortedLyrics,
+    versionDiff,
+    handleCreateRevision,
+    handleApplyRevision,
+    handleRejectRevision,
+    handleCompareVersions,
+    handleRestoreVersion,
+    // collaboration
+    commentBody,
+    setCommentBody,
+    commentAuthor,
+    setCommentAuthor,
+    commentTargetValue,
+    setCommentTargetValue,
+    commentTargets,
+    sortedComments,
+    sortedProjectEvents,
+    handleCreateComment,
+    handleUpdateComment,
+  };
+}
 
-      {!isLoading ? <CreationChainProgress stage={creationStage} /> : null}
+type WorkspaceContextValue = ReturnType<typeof useWorkspaceController>;
 
-      <div id="song-spec-panel" className="workspace-anchor" tabIndex={-1}>
-      <SongSpecWorkspace
-        activeVersion={activeVersion}
-        answers={answers}
-        draftForm={draftForm}
-        idea={idea}
-        isSaving={pendingActions.isPending("songSpec")}
-        latestIntake={latestIntake}
-        onAnswersChange={setAnswers}
-        onApprove={handleApprove}
-        onDraftChange={setDraftForm}
-        onGenerateDraft={handleGenerateDraft}
-        onIdeaChange={setIdea}
-        onIntakeSubmit={handleIntakeSubmit}
-        onSongSpecSubmit={handleSongSpecSubmit}
-        state={state}
-        structureLocked={Boolean(approvedVersion)}
-      />
-      </div>
+const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-      <div id="song-structure-panel" className="workspace-anchor" tabIndex={-1}>
-      <StructureWorkspace
-        isSaving={pendingActions.isPending("structure")}
-        onChange={handleStructureChange}
-        projectId={projectId}
-        sourceVersion={approvedVersion}
-      />
-      </div>
+export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const value = useWorkspaceController();
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+}
 
-      <CandidateWorkspace
-        approvedSongSpecId={approvedVersion?.id ?? null}
-        canGenerateArrangement={canGenerateArrangementPlan}
-        candidates={candidates}
-        isSaving={pendingActions.isPending("ai", "tasks")}
-        latestIntakeId={latestIntake?.intake_id ?? null}
-        loadErrors={aiLoadErrors}
-        onCancel={handleCancelRun}
-        onGenerate={handleGenerateCandidates}
-        onRetry={loadWorkspace}
-        onSelect={handleSelectCandidate}
-        providers={providerProfiles}
-        runs={textRuns}
-      />
-
-      <div id="composition-panel" className="asset-grid workspace-anchor" tabIndex={-1}>
-        <AudioWorkspace
-          analyses={sortedReferenceAnalyses}
-          approvedSongSpecId={approvedVersion?.id ?? null}
-          derivatives={sortedAudioDerivatives}
-          file={audioUploadFile}
-          isSaving={pendingActions.isPending("audio", "tasks")}
-          kind={audioUploadKind}
-          notes={audioUploadNotes}
-          markers={sortedAudioMarkers}
-          onAnalyze={handleAnalyzeReference}
-          onApplyAnalysis={handleApplyReferenceAnalysis}
-          onCancel={handleCancelRun}
-          onCreateDerivative={handleCreateAudioDerivative}
-          onCreateMarker={handleCreateAudioMarker}
-          onDeleteMarker={handleDeleteAudioMarker}
-          onExtract={handleExtractAudioMidi}
-          onFileChange={setAudioUploadFile}
-          onKindChange={setAudioUploadKind}
-          onNotesChange={setAudioUploadNotes}
-          onUpdateUpload={handleUpdateAudioUpload}
-          onUpdateMarker={handleUpdateAudioMarker}
-          onUpload={handleAudioUploadSubmit}
-          projectId={projectId}
-          runs={audioRuns}
-          uploads={sortedAudioUploads}
-        />
-        <CompositionWorkspace
-          activeChords={activeChords}
-          activeLyrics={activeLyrics}
-          canGenerate={canGenerateAssets}
-          disabledReason={compositionGuardReason}
-          isGeneratingChords={pendingActions.isPending("chords")}
-          isGeneratingLyrics={pendingActions.isPending("composition")}
-          isPreviewingChords={pendingActions.isPending("chordsPreview")}
-          isRewritingLyrics={pendingActions.isPending("lyricsRewrite")}
-          isSavingComposition={pendingActions.isPending("composition", "midi")}
-          isSavingChords={pendingActions.isPending("chords")}
-          isSavingLyrics={pendingActions.isPending("lyrics")}
-          isTransposingChords={pendingActions.isPending("chordsTranspose")}
-          midiAssets={sortedMidiAssets}
-          onGenerateChords={handleGenerateChords}
-          onGenerateLyrics={handleGenerateLyrics}
-          onGenerateMidi={handleGenerateMidi}
-          onChordsPreview={handleChordsPreview}
-          onChordsSave={handleChordsSave}
-          onChordsTranspose={handleChordsTranspose}
-          onLyricsRewrite={handleLyricsRewrite}
-          onLyricsSave={handleLyricsSave}
-          onMidiSave={handleMidiSave}
-          onMidiTransform={handleMidiTransform}
-          projectId={projectId}
-        />
-      </div>
-
-      <div id="delivery-panel" className="delivery-grid workspace-anchor" tabIndex={-1}>
-        <DeliveryWorkspace
-          activeArrangement={activeArrangement}
-          arrangementPlan={arrangementDraft}
-          assetTree={assetTree}
-          canExport={canExportProject}
-          canGenerateArrangement={canGenerateArrangementPlan}
-          arrangementDisabledReason={arrangementGuardReason}
-          exportDisabledReason={exportGuardReason}
-          exports={sortedExports}
-          isSaving={pendingActions.isPending("delivery")}
-          onArrangementChange={setArrangementDraft}
-          onArrangementSubmit={handleArrangementSubmit}
-          onCreateExport={handleCreateExport}
-          onGenerateArrangement={handleGenerateArrangement}
-        />
-        <div id="demo-panel" className="workspace-anchor" tabIndex={-1}>
-        <DemoWorkspace
-          assetTree={assetTree}
-          canGenerate={canGenerateDemoVersion}
-          disabledReason={demoGuardReason}
-          demos={sortedDemos}
-          isSaving={pendingActions.isPending("demo", "tasks")}
-          onGenerate={handleGenerateDemo}
-          onCancel={handleCancelRun}
-          onRetry={handleRetryRun}
-          projectId={projectId}
-          runs={demoRuns}
-        />
-        </div>
-      </div>
-
-      <RevisionWorkspace
-        arrangements={sortedArrangements}
-        demos={sortedDemos}
-        feedback={revisionFeedback}
-        isSaving={pendingActions.isPending("revision")}
-        lyrics={sortedLyrics}
-        melodyAssets={melodyAssets}
-        onApply={handleApplyRevision}
-        onCompare={handleCompareVersions}
-        onFeedbackChange={setRevisionFeedback}
-        onPlan={handleCreateRevision}
-        onReject={handleRejectRevision}
-        onRestore={handleRestoreVersion}
-        revisions={sortedRevisions}
-        versionDiff={versionDiff}
-      />
-
-      <CollaborationWorkspace
-        author={commentAuthor}
-        body={commentBody}
-        comments={sortedComments}
-        events={sortedProjectEvents}
-        isSaving={pendingActions.isPending("collaboration")}
-        onAuthorChange={setCommentAuthor}
-        onBodyChange={setCommentBody}
-        onSubmit={handleCreateComment}
-        onTargetChange={setCommentTargetValue}
-        onUpdateStatus={handleUpdateComment}
-        targetOptions={commentTargets}
-        targetValue={commentTargetValue}
-      />
-
-      <SongSpecVersionsPanel versions={sortedVersions} />
-    </div>
-  );
+export function useWorkspace(): WorkspaceContextValue {
+  const value = useContext(WorkspaceContext);
+  if (value === null) {
+    throw new Error("useWorkspace must be used inside the project workspace layout");
+  }
+  return value;
 }
 
 function emptyDraftForm(): SongSpecDraftForm {

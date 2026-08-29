@@ -43,7 +43,7 @@ test.describe("audio derivatives", () => {
   });
 
   test("queues PCM WAV normalization from the audio upload row", async ({ page }) => {
-    await page.goto("/projects/" + projectId);
+    await page.goto("/projects/" + projectId + "/audio");
     const audioPanel = page.locator("section[aria-labelledby='audio-title']");
     const audioRow = audioPanel.locator(".audio-upload-row").first();
     await expect(audioRow.getByText("derivative-fixture.wav", { exact: true })).toBeVisible();

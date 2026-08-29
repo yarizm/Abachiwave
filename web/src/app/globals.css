@@ -96,6 +96,9 @@
   --teal-700: #2dd4bf;
   --teal-800: #14b8a6;
   --teal-50: #134e4a;
+  /* Soft accent surface for selected/playing states. Sits just above --panel so
+     the highlight reads without glowing; --accent on top of it measures 6.3:1. */
+  --teal-100: #123f3a;
   --red-700: #f87171;
   --red-50: #4c1d1d;
   --amber-600: #fbbf24;
@@ -277,7 +280,11 @@ html[data-theme="light"] .theme-toggle-moon {
 }
 
 .main {
-  width: min(1120px, calc(100vw - 32px));
+  /* A workbench holding waveforms, a piano roll and chord grids needs the width;
+     the old 1120px cap left a chord chart scrolling inside a half-empty screen.
+     The 32px gutter stays: at 390px the audio row's action buttons overlap once
+     the content column loses even 16px more. */
+  width: min(1760px, calc(100vw - 32px));
   margin: 0 auto;
   padding: 32px 0;
 }
@@ -301,6 +308,97 @@ html[data-theme="light"] .theme-toggle-moon {
 .workspace-anchor {
   scroll-margin-top: 80px;
   outline: none;
+}
+
+/* —— 工作台导航 ——
+   The creation chain is the navigation: each stage is a route, and the step's
+   derived status (done / active / blocked) is what the link carries. Everything
+   here must wrap rather than overflow — the older .creation-chain stepper causes
+   page-level horizontal scroll between 781px and ~1000px, which is the mistake
+   this block exists not to repeat. */
+.workspace-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-4);
+}
+
+.workspace-nav-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.workspace-nav-utility {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.workspace-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.workspace-nav-link:hover {
+  background: var(--surface-overlay);
+  color: var(--foreground);
+}
+
+.workspace-nav-link[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.workspace-nav-link.is-done {
+  color: var(--muted);
+}
+
+.workspace-nav-link.is-blocked {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.workspace-nav-check {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.workspace-nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-circle);
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.workspace-nav-link.is-active .workspace-nav-dot {
+  background: var(--accent);
+}
+
+@media (max-width: 780px) {
+  .workspace-nav {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
 }
 
 .creation-chain {
@@ -1095,6 +1193,10 @@ html[data-theme="light"] .theme-toggle-moon {
 
 .audio-upload-main {
   display: grid;
+  /* min-width: 0 lets this box shrink, but the implicit track inside it is still
+     auto-sized, so a wide child (the reference-analysis card) sets a min-content
+     floor and overflows the row. State the column to put a real floor under it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
 }

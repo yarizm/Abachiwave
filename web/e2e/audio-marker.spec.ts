@@ -173,7 +173,7 @@ test.describe("audio markers", () => {
 });
 
 async function openAudioRow(page: Page, project: Project) {
-  await page.goto("/projects/" + project.id);
+  await page.goto("/projects/" + project.id + "/audio");
   await expect(page.getByRole("heading", { name: project.name })).toBeVisible();
   const audioPanel = page.locator("section[aria-labelledby='audio-title']");
   await expect(audioPanel.getByText("audio-marker-fixture.wav", { exact: true })).toBeVisible();

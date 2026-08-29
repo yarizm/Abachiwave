@@ -45,10 +45,22 @@ test.describe("project workspace", () => {
     await expect(page.getByRole("heading", { name: project.name })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Project review" })).toBeVisible();
     await expect(page.getByText("Blocked", { exact: false }).first()).toBeVisible();
+
+    // The workspace is eight routes now, so the guards that used to sit together on
+    // one page are checked where each of them lives. The project header stays put.
+    await page.getByRole("link", { name: "SongSpec" }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/spec$`));
+    await expect(page.getByRole("heading", { name: project.name })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Idea intake" })).toBeVisible();
     await expect(page.getByText("No SongSpec draft yet.", { exact: false })).toBeVisible();
+
+    await page.getByRole("link", { name: "Composition" }).click();
     await expect(page.getByRole("button", { name: "Generate lyrics" })).toBeDisabled();
+
+    await page.getByRole("link", { name: "Demo" }).click();
     await expect(page.getByRole("button", { name: "Generate WAV demo" })).toBeDisabled();
+
+    await page.getByRole("link", { name: "Arrangement" }).click();
     await expect(page.getByRole("button", { name: "Export ZIP" })).toBeDisabled();
   });
 
@@ -72,36 +84,55 @@ test.describe("project workspace", () => {
 
     await page.getByRole("textbox", { name: "搜索项目" }).fill(project.name);
     await page.getByRole("link", { name: new RegExp(project.name) }).click();
+
+    // Translation coverage across the whole workspace. The panels are spread over
+    // eight routes now, so this walks them; the nav itself must be translated too.
     await expect(page.getByRole("heading", { name: "项目审查" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "交接摘要" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "项目设置" })).toBeVisible();
+    await expect(page.locator(".handoff-markdown")).toHaveValue(/当前资产/);
+    // Review details come from the API and are translated client-side.
+    await expect(page.getByText("生成资产前请先确认完整的 SongSpec。").first()).toBeVisible();
+
+    await page.getByRole("link", { name: "歌曲规格", exact: true }).click();
     await expect(page.getByRole("heading", { name: "灵感输入" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "SongSpec 编辑器" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "SongSpec 版本" })).toBeVisible();
+    await expect(page.getByText("Idea intake", { exact: true })).toHaveCount(0);
+
+    await page.getByRole("link", { name: "音频", exact: true }).click();
     await expect(page.getByRole("heading", { name: "音频" })).toBeVisible();
+
+    await page.getByRole("link", { name: "词曲创作" }).click();
     await expect(page.getByRole("heading", { name: "歌词编辑器" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "和弦编辑器" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "生成歌词" })).toBeDisabled();
+
+    await page.getByRole("link", { name: "编曲方案" }).click();
     await expect(page.getByRole("heading", { name: "编曲方案" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "导出" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "导出 ZIP" })).toBeDisabled();
+
+    await page.getByRole("link", { name: "Demo" }).click();
+    await expect(page.getByRole("button", { name: "生成 WAV Demo" })).toBeDisabled();
+
+    await page.getByRole("link", { name: "历史" }).click();
     await expect(page.getByRole("heading", { name: "修改请求" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "评论" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "活动记录" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "SongSpec 版本" })).toBeVisible();
-    await expect(page.getByText("生成资产前请先确认完整的 SongSpec。").first()).toBeVisible();
-    await expect(page.locator(".handoff-markdown")).toHaveValue(/当前资产/);
-    await expect(page.getByText("Project settings", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Idea intake", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "生成歌词" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "生成 WAV Demo" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "导出 ZIP" })).toBeDisabled();
 
+    await page.getByRole("link", { name: "设置" }).click();
+    await expect(page.getByRole("heading", { name: "项目设置" })).toBeVisible();
+    await expect(page.getByText("Project settings", { exact: true })).toHaveCount(0);
+
+    // The setting survives a reload on whatever route you happen to be on.
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await expect(page.getByRole("combobox", { name: "语言" })).toHaveValue("zh-CN");
-    await expect(page.getByRole("heading", { name: "灵感输入" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "项目设置" })).toBeVisible();
   });
 
   test("recovers after a transient intake failure", async ({ page }) => {
-    await page.goto(`/projects/${project.id}`);
+    await page.goto(`/projects/${project.id}/spec`);
     await expect(page.getByRole("heading", { name: project.name })).toBeVisible();
 
     let attempts = 0;
@@ -159,6 +190,9 @@ test.describe("project workspace", () => {
       await expect(page).toHaveURL(new RegExp(`/projects/${browserProjectId}$`));
       await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
 
+      // The chain is walked by navigating it: each phase below starts by moving to
+      // the route that owns it, which exercises the workspace nav as it goes.
+      await page.getByRole("link", { name: "SongSpec" }).click();
       await page.getByRole("textbox", { name: "Song idea" }).fill(completeIdea);
       await runApiAction(
         page,
@@ -178,6 +212,7 @@ test.describe("project workspace", () => {
       await expect(approveButton).toBeEnabled();
       await runApiAction(page, approveButton, "POST", "/approve", 200);
 
+      await page.getByRole("link", { name: "Composition" }).click();
       const lyricsResponse = await runApiAction(
         page,
         page.getByRole("button", { name: "Generate lyrics" }),
@@ -283,6 +318,7 @@ test.describe("project workspace", () => {
         `/api/v1/projects/${browserProjectId}/midi/generate`,
         201,
       );
+      await page.getByRole("link", { name: "Arrangement" }).click();
       await runApiAction(
         page,
         page.getByRole("button", { name: "Generate arrangement" }),
@@ -291,6 +327,7 @@ test.describe("project workspace", () => {
         201,
       );
 
+      await page.getByRole("link", { name: "History" }).click();
       const commentPanel = page.locator("section[aria-labelledby='comments-title']");
       await commentPanel
         .getByRole("textbox", { name: "Comment" })
@@ -312,6 +349,7 @@ test.describe("project workspace", () => {
       );
       await expect(commentPanel.getByText("resolved", { exact: true })).toBeVisible();
 
+      await page.getByRole("link", { name: "Demo" }).click();
       const demoPanel = page.locator("section[aria-labelledby='demo-title']");
       await runApiAction(
         page,
@@ -328,6 +366,7 @@ test.describe("project workspace", () => {
       expect(demoBytes.subarray(0, 4).toString("ascii")).toBe("RIFF");
       expect(demoBytes.subarray(8, 12).toString("ascii")).toBe("WAVE");
 
+      await page.getByRole("link", { name: "History" }).click();
       const revisionPanel = page.locator("section[aria-labelledby='revision-title']");
       await revisionPanel
         .getByRole("textbox", { name: "Feedback" })
@@ -366,6 +405,7 @@ test.describe("project workspace", () => {
         200,
       );
 
+      await page.getByRole("link", { name: "Audio" }).click();
       const audioPanel = page.locator("section[aria-labelledby='audio-title']");
       await audioPanel.getByLabel("Audio file").setInputFiles({
         name: "browser-humming.wav",
@@ -395,6 +435,7 @@ test.describe("project workspace", () => {
       await expect(audioPanel.getByText("MIDI ready:", { exact: false })).toBeVisible({
         timeout: 120_000,
       });
+      await page.getByRole("link", { name: "Composition" }).click();
       const midiPanel = page.locator("section[aria-labelledby='midi-title']");
       const midiBytes = await downloadBytes(
         page,
@@ -402,6 +443,7 @@ test.describe("project workspace", () => {
       );
       expect(midiBytes.subarray(0, 4).toString("ascii")).toBe("MThd");
 
+      await page.getByRole("link", { name: "Arrangement" }).click();
       const exportPanel = page.locator("section[aria-labelledby='export-title']");
       await runApiAction(
         page,
@@ -416,6 +458,7 @@ test.describe("project workspace", () => {
       );
       expect(exportBytes.subarray(0, 2).toString("ascii")).toBe("PK");
 
+      await page.getByRole("link", { name: "Settings" }).click();
       await runApiAction(
         page,
         page.getByRole("button", { name: "Archive project" }),

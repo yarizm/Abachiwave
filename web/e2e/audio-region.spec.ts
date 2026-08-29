@@ -126,7 +126,7 @@ test.describe("audio analysis range", () => {
 });
 
 async function openAudioRow(page: Page, project: Project) {
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/audio`);
   await expect(page.getByRole("heading", { name: project.name })).toBeVisible();
   const audioPanel = page.locator("section[aria-labelledby='audio-title']");
   await expect(audioPanel.getByText("audio-region-fixture.wav", { exact: true })).toBeVisible();

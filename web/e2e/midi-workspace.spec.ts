@@ -26,7 +26,7 @@ test.describe("MIDI piano roll", () => {
 
   test("renders notes and creates immutable edit and transform versions", async ({ page }) => {
     test.setTimeout(180_000);
-    await page.goto(`/projects/${projectId}`);
+    await page.goto(`/projects/${projectId}/composition`);
     const midiPanel = page.locator("section[aria-labelledby='midi-title']");
     const canvas = midiPanel.getByRole("application", { name: "MIDI piano roll" });
     await expect(canvas).toBeVisible();

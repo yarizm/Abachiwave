@@ -8,41 +8,30 @@ import { useLocale } from "@/i18n/locale-provider";
 import { Project } from "@/lib/projects";
 import { ProjectHandoff, ProjectReview } from "@/lib/composition";
 
-type ProjectOverviewProps = {
-  description: string;
+type ProjectHeaderProps = {
   error: string | null;
   errorHint: string | null;
-  handoff: ProjectHandoff | null;
   isLoading: boolean;
-  isSaving: boolean;
-  name: string;
-  onDescriptionChange: (value: string) => void;
   onErrorHintAction: () => void;
-  onNameChange: (value: string) => void;
   onRefresh: () => void;
-  onStatusToggle: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   project: Project | null;
-  review: ProjectReview | null;
 };
 
-export function ProjectOverview({
-  description,
+/**
+ * Project identity and the load error, shown on every workspace route.
+ *
+ * This used to be the top of the single workspace page. It now lives in the
+ * workspace layout, so the project you are editing stays named while you move
+ * between the SongSpec, composition, arrangement and demo routes.
+ */
+export function ProjectHeader({
   error,
   errorHint,
-  handoff,
   isLoading,
-  isSaving,
-  name,
-  onDescriptionChange,
   onErrorHintAction,
-  onNameChange,
   onRefresh,
-  onStatusToggle,
-  onSubmit,
   project,
-  review,
-}: ProjectOverviewProps) {
+}: ProjectHeaderProps) {
   const { t, text } = useLocale();
   return (
     <>
@@ -77,19 +66,21 @@ export function ProjectOverview({
           ) : null}
         </div>
       ) : null}
+    </>
+  );
+}
 
+type ProjectOverviewProps = {
+  handoff: ProjectHandoff | null;
+  review: ProjectReview | null;
+};
+
+/** Readiness and handoff, the content of the workspace overview route. */
+export function ProjectOverview({ handoff, review }: ProjectOverviewProps) {
+  return (
+    <>
       <ReviewPanel review={review} />
       <HandoffPanel handoff={handoff} />
-      <ProjectSettingsPanel
-        description={description}
-        isSaving={isSaving}
-        name={name}
-        onDescriptionChange={onDescriptionChange}
-        onNameChange={onNameChange}
-        onStatusToggle={onStatusToggle}
-        onSubmit={onSubmit}
-        project={project}
-      />
     </>
   );
 }
@@ -105,7 +96,7 @@ type ProjectSettingsPanelProps = {
   project: Project | null;
 };
 
-function ProjectSettingsPanel({
+export function ProjectSettingsPanel({
   description,
   isSaving,
   name,
