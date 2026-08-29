@@ -11,6 +11,13 @@ const contentSecurityPolicy = [
   scriptPolicy,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  // Tone.js drives its transport clock from a Web Worker it builds out of a
+  // blob: URL. Without this, that worker is blocked and every transport-
+  // scheduled callback silently never fires: audition plays no audio, no
+  // chord highlights, and playback never ends. Transport.seconds keeps
+  // advancing off the AudioContext clock, so the playhead still moves and
+  // the failure looks like working playback. Scoped to same-origin blobs.
+  "worker-src 'self' blob:",
   `connect-src 'self' ${apiOrigin}`,
   `media-src 'self' blob: ${apiOrigin}`,
   "font-src 'self' data:",
