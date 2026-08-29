@@ -1485,6 +1485,14 @@ html[data-theme="light"] .theme-toggle-moon {
   padding-top: var(--space-3);
 }
 
+/* The provider name (e.g. local_deterministic_reference_analysis) is a single
+   long token; without wrapping it sets a ~360px min-content floor that
+   stretches the whole document horizontally on phone viewports. */
+.reference-analysis-card .meta,
+.reference-analysis-card strong {
+  overflow-wrap: anywhere;
+}
+
 .reference-analysis-apply {
   display: grid;
   gap: var(--space-3);
