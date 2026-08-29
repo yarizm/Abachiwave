@@ -103,9 +103,13 @@ test.describe("project workspace", () => {
     await expect(page.getByRole("heading", { name: "音频" })).toBeVisible();
 
     await page.getByRole("link", { name: "词曲创作" }).click();
+    await expect(page.getByRole("heading", { name: "分段对照" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "生成歌词" })).toBeDisabled();
+    await expect(page.getByText("节拍器", { exact: true })).toBeVisible();
+    await expect(page.getByText("循环", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "完整编辑器" }).click();
     await expect(page.getByRole("heading", { name: "歌词编辑器" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "和弦编辑器" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "生成歌词" })).toBeDisabled();
 
     await page.getByRole("link", { name: "编曲方案" }).click();
     await expect(page.getByRole("heading", { name: "编曲方案" })).toBeVisible();
@@ -213,6 +217,9 @@ test.describe("project workspace", () => {
       await runApiAction(page, approveButton, "POST", "/approve", 200);
 
       await page.getByRole("link", { name: "Composition" }).click();
+      // The section view is where this route opens; the rewrite studio, transpose and
+      // note-level editing exercised below live in the full editors.
+      await page.getByRole("button", { name: "Full editors" }).click();
       const lyricsResponse = await runApiAction(
         page,
         page.getByRole("button", { name: "Generate lyrics" }),
@@ -436,6 +443,7 @@ test.describe("project workspace", () => {
         timeout: 120_000,
       });
       await page.getByRole("link", { name: "Composition" }).click();
+      await page.getByRole("button", { name: "Full editors" }).click();
       const midiPanel = page.locator("section[aria-labelledby='midi-title']");
       const midiBytes = await downloadBytes(
         page,

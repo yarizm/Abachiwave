@@ -3,6 +3,10 @@
   --teal-700: #0f766e;
   --teal-800: #115e59;
   --teal-50: #e7f5f2;
+  /* Soft "selected/playing" surface — see the dark-theme definition below for
+     the contrast rationale. Light theme's panel is already white, so this
+     reuses --teal-50 rather than inventing a second near-white step. */
+  --teal-100: var(--teal-50);
   --red-700: #b42318;
   --red-50: #fef3f2;
   --amber-600: #d8a63b;
@@ -2865,5 +2869,420 @@ html[data-theme="light"] .theme-toggle-moon {
 
   .midi-transform-actions .button {
     width: 100%;
+  }
+}
+
+/* —— 分段对照面 ——
+   One row per song section: its lyrics, its chords and its melody side by side.
+   The chord track and the melody strip share a measure count, so the two grids
+   line up column for column — that alignment is the whole point of the surface,
+   and any width applied to one must apply to the other. */
+
+.composition-view-switch {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.section-composition-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.section-track-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  margin: var(--space-7) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--surface-sunken);
+  transition: box-shadow 140ms ease;
+}
+
+/* Inset rather than a real border-left: the row already has a 1px border on
+   all four sides, and an inset shadow adds a thicker accent edge without
+   nudging that border or anything inside it. */
+.section-track.is-playing {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.section-track-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.section-track-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* .button.secondary.compact-button already covers sizing, border and idle
+   color; this only adds the transition and the pressed/active read for
+   is-playing. The transition lives on the base rule (not just .is-playing)
+   so leaving the state animates too instead of snapping back. */
+.section-play {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.section-play.is-playing {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.section-track-body {
+  display: grid;
+  /* Words on the left, the timeline on the right. The timeline gets the larger
+     share because it carries both the chord grid and the melody under it. */
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+/* —— 歌词列 ——
+   One line of lyric was 110px: a 76px textarea holding 40 characters, a metadata
+   strip, a single-character Mark field and four icon buttons. Here a line is one
+   row, and the counts sit quietly beside it. */
+
+.section-lyric-lines {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-lyric-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.section-lyric-text {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.section-lyric-text:hover:not(:disabled) {
+  background: var(--surface-overlay);
+}
+
+.section-lyric-text:focus {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.section-lyric-meta {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* —— 时间轴：和弦格 + 旋律条 —— */
+
+.section-timeline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.section-chord-track {
+  display: grid;
+  grid-auto-flow: column;
+  /* Equal measures, each free to shrink — the melody strip below spans the same
+     total width with the same measure count, which is what keeps them aligned. */
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.section-chord-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.section-chord-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.section-chord-chip:hover {
+  border-color: var(--accent);
+}
+
+.section-chord-chip[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.section-chord-chip:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+/* Distinct from --accent-soft above (hover/expanded) so a chip that is both
+   expanded and sounding still reads as two different states. */
+.section-chord-chip.is-sounding {
+  border-color: var(--accent);
+  background: var(--teal-100);
+}
+
+.section-chord-symbol {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.section-chord-symbol.is-playing {
+  color: var(--accent);
+}
+
+.section-chord-symbol.section-chord-placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.section-chord-editor {
+  display: grid;
+  gap: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--panel);
+}
+
+.section-chord-event {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: var(--space-2);
+  align-items: end;
+  transition: box-shadow 140ms ease;
+}
+
+/* box-shadow rather than a background fill: the row's own inputs already
+   paint --surface-raised over most of the grid, so a fill here would mostly
+   hide behind them. A ring stays visible regardless. */
+.section-chord-event.is-sounding {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 2px var(--teal-100);
+}
+
+.section-chord-input {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.section-chord-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.section-chord-field-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.section-chord-number,
+.section-chord-select {
+  min-width: 0;
+  min-height: var(--control-h-compact);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+/* The old inversion select clipped its own option text to Roo. Give this one room
+   for the longest label in either language rather than letting it truncate. */
+.section-chord-select {
+  min-width: 84px;
+  padding-right: var(--space-1);
+}
+
+.section-chord-remove,
+.section-chord-add,
+.section-chord-measure-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-h-compact);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.section-chord-remove:hover:not(:disabled),
+.section-chord-measure-remove:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.section-chord-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.section-chord-remove:disabled,
+.section-chord-add:disabled,
+.section-chord-measure-remove:disabled,
+.section-chord-number:disabled,
+.section-chord-select:disabled,
+.section-chord-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.section-measure-add {
+  justify-self: start;
+}
+
+/* —— 旋律条 —— */
+
+.section-melody-strip {
+  position: relative;
+  display: grid;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.section-melody-svg {
+  display: block;
+}
+
+.section-melody-gridline {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.section-melody-note {
+  fill: var(--accent);
+}
+
+.section-melody-note.is-interactive {
+  cursor: pointer;
+}
+
+.section-melody-note.is-interactive:hover {
+  fill: var(--accent-strong);
+}
+
+.section-melody-note.is-selected {
+  fill: var(--foreground);
+}
+
+/* --danger rather than --accent: notes already paint the strip in --accent,
+   so the cursor needs a hue nothing else in the strip uses to stay readable
+   while crossing a note. Same red the waveform's own playhead uses. */
+.section-melody-playhead {
+  stroke: var(--danger);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.section-melody-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* —— 未归段旋律 ——
+   Notes transcribed from a humming upload carry no section: the audio path parses a
+   MIDI file, which has no song structure. They get their own lane rather than being
+   dropped or guessed into a section. */
+
+.section-unassigned {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--warning-soft);
+}
+
+.section-unassigned h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+@media (max-width: 1000px) {
+  .section-track-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 780px) {
+  .section-chord-track {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    gap: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-chord-chip,
+  .section-chord-event,
+  .section-play,
+  .section-track {
+    transition: none;
   }
 }

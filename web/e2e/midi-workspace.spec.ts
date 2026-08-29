@@ -27,6 +27,9 @@ test.describe("MIDI piano roll", () => {
   test("renders notes and creates immutable edit and transform versions", async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto(`/projects/${projectId}/composition`);
+    // The composition route opens on the section view; the piano roll lives in the
+    // full editors alongside the other note-level tools.
+    await page.getByRole("button", { name: "Full editors" }).click();
     const midiPanel = page.locator("section[aria-labelledby='midi-title']");
     const canvas = midiPanel.getByRole("application", { name: "MIDI piano roll" });
     await expect(canvas).toBeVisible();
