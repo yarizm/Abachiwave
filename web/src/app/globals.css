@@ -1485,10 +1485,19 @@ html[data-theme="light"] .theme-toggle-moon {
   padding-top: var(--space-3);
 }
 
-/* The provider name (e.g. local_deterministic_reference_analysis) is a single
-   long token; without wrapping it sets a ~360px min-content floor that
-   stretches the whole document horizontally on phone viewports. */
-.reference-analysis-card .meta,
+/* Provider names and asset ids render as single unbreakable tokens - e.g.
+   local_deterministic_reference_analysis, whose min-content measures 304px
+   here and more under other font stacks. Wherever one appears it sets that
+   floor for its whole column, and the panel padding around it pushes the
+   document past a phone viewport: the audio route reached 405px in a 390px
+   window, which slid neighbouring controls over a button and cost a browser
+   test a 60s click timeout. Scoping this to one card was not enough - the
+   same token also renders in the generation run rows outside it.
+
+   `anywhere` rather than `break-word`: only `anywhere` lowers the min-content
+   floor, and the floor is the whole problem. */
+.meta,
+.run-row strong,
 .reference-analysis-card strong {
   overflow-wrap: anywhere;
 }
