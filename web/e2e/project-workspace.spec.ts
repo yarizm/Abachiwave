@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { expect, Locator, Page, test } from "@playwright/test";
+import { expect, Locator, Page, test } from "./fixtures";
 
 const apiBaseUrl = process.env.ABACHIWAVE_API_BASE_URL ?? "http://localhost:8000";
 

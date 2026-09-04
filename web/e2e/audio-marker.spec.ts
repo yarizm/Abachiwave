@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, Page, test } from "@playwright/test";
+import { expect, Page, test } from "./fixtures";
 
 const apiBaseUrl = process.env.ABACHIWAVE_API_BASE_URL ?? "http://localhost:8000";
 
