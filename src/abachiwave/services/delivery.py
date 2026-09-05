@@ -1068,9 +1068,7 @@ def _sort_midi_assets_for_export(assets: list[MidiAssetVersion]) -> list[MidiAss
 
 
 def _song_spec_ref(version: SongSpecVersion) -> AssetReference:
-    status = (
-        version.status.value if isinstance(version.status, SongSpecStatus) else str(version.status)
-    )
+    status = version.status.value
     return AssetReference(
         asset_type="song_spec",
         id=UUID(version.id),

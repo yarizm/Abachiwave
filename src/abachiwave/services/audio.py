@@ -361,9 +361,8 @@ async def create_audio_to_midi_run(
             "audio_upload_id": upload.id,
             # The upload kind is what any provider routing keys off, so it belongs in the
             # run record: without it a finished run cannot explain why it used the
-            # provider it used. str() rather than .value because the column is a plain
-            # String, so a loaded row carries the raw value, not the StrEnum member.
-            "audio_upload_kind": str(upload.kind),
+            # provider it used.
+            "audio_upload_kind": upload.kind.value,
             "song_spec_id": song_spec.id,
             "target_kind": target_kind.value,
             "audio_derivative_id": derivative.id if derivative is not None else None,

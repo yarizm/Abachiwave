@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class MidiAssetKind(StrEnum):
@@ -219,7 +220,9 @@ class MidiAssetVersion(Base):
         index=True,
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    kind: Mapped[MidiAssetKind] = mapped_column(String(16), nullable=False, index=True)
+    kind: Mapped[MidiAssetKind] = mapped_column(
+        EnumString(MidiAssetKind, 16), nullable=False, index=True
+    )
     schema_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -344,7 +347,7 @@ class ExportBundle(Base):
         index=True,
     )
     status: Mapped[ExportBundleStatus] = mapped_column(
-        String(16),
+        EnumString(ExportBundleStatus, 16),
         nullable=False,
         default=ExportBundleStatus.ready,
         server_default=ExportBundleStatus.ready.value,

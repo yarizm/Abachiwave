@@ -336,12 +336,7 @@ async def cancel_generation_run(
         return None, "GenerationRun not found"
     if run.status not in {GenerationRunStatus.queued, GenerationRunStatus.running}:
         return None, "GenerationRun cannot be cancelled"
-    previous_status = run.status
-    previous_status_value = (
-        previous_status.value
-        if isinstance(previous_status, GenerationRunStatus)
-        else str(previous_status)
-    )
+    previous_status_value = run.status.value
     run.status = GenerationRunStatus.cancelled
     run.error_code = "task_cancelled"
     run.error_message = "cancelled by user"

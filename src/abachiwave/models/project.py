@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, Index, String, Text, func
+from sqlalchemy import DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class ProjectStatus(StrEnum):
@@ -25,7 +26,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[ProjectStatus] = mapped_column(
-        Enum(ProjectStatus, native_enum=False, length=16),
+        EnumString(ProjectStatus, 16),
         nullable=False,
         default=ProjectStatus.active,
         server_default=ProjectStatus.active.value,

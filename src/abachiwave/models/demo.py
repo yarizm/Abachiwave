@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class GenerationRunStatus(StrEnum):
@@ -46,13 +47,13 @@ class GenerationRun(Base):
         index=True,
     )
     run_type: Mapped[GenerationRunType] = mapped_column(
-        String(32),
+        EnumString(GenerationRunType, 32),
         nullable=False,
         default=GenerationRunType.demo_generation,
         server_default=GenerationRunType.demo_generation.value,
     )
     status: Mapped[GenerationRunStatus] = mapped_column(
-        String(24),
+        EnumString(GenerationRunStatus, 24),
         nullable=False,
         default=GenerationRunStatus.queued,
         server_default=GenerationRunStatus.queued.value,

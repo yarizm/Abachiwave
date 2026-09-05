@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class TextWorkflow(StrEnum):
@@ -81,7 +82,9 @@ class PromptTemplateVersion(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    workflow: Mapped[TextWorkflow] = mapped_column(String(32), nullable=False, index=True)
+    workflow: Mapped[TextWorkflow] = mapped_column(
+        EnumString(TextWorkflow, 32), nullable=False, index=True
+    )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     template_body: Mapped[str] = mapped_column(Text, nullable=False)
     output_schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -132,10 +135,12 @@ class GenerationCandidate(Base):
         nullable=True,
         index=True,
     )
-    workflow: Mapped[TextWorkflow] = mapped_column(String(32), nullable=False, index=True)
+    workflow: Mapped[TextWorkflow] = mapped_column(
+        EnumString(TextWorkflow, 32), nullable=False, index=True
+    )
     candidate_index: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[GenerationCandidateStatus] = mapped_column(
-        String(24),
+        EnumString(GenerationCandidateStatus, 24),
         nullable=False,
         default=GenerationCandidateStatus.pending,
         server_default=GenerationCandidateStatus.pending.value,
@@ -162,9 +167,11 @@ class EvaluationRun(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     sample_set: Mapped[str] = mapped_column(String(120), nullable=False)
-    workflow: Mapped[TextWorkflow] = mapped_column(String(32), nullable=False, index=True)
+    workflow: Mapped[TextWorkflow] = mapped_column(
+        EnumString(TextWorkflow, 32), nullable=False, index=True
+    )
     status: Mapped[EvaluationRunStatus] = mapped_column(
-        String(24),
+        EnumString(EvaluationRunStatus, 24),
         nullable=False,
         default=EvaluationRunStatus.queued,
         server_default=EvaluationRunStatus.queued.value,

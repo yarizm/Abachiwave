@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class ProjectCommentStatus(StrEnum):
@@ -42,14 +43,14 @@ class ProjectComment(Base):
     author_name: Mapped[str] = mapped_column(String(120), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[ProjectCommentStatus] = mapped_column(
-        String(24),
+        EnumString(ProjectCommentStatus, 24),
         nullable=False,
         default=ProjectCommentStatus.open,
         server_default=ProjectCommentStatus.open.value,
         index=True,
     )
     target_type: Mapped[ProjectCommentTargetType] = mapped_column(
-        String(32),
+        EnumString(ProjectCommentTargetType, 32),
         nullable=False,
         default=ProjectCommentTargetType.project,
         server_default=ProjectCommentTargetType.project.value,

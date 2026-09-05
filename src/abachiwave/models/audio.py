@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class AudioUploadKind(StrEnum):
@@ -55,9 +56,11 @@ class AudioUpload(Base):
         nullable=False,
         index=True,
     )
-    kind: Mapped[AudioUploadKind] = mapped_column(String(24), nullable=False, index=True)
+    kind: Mapped[AudioUploadKind] = mapped_column(
+        EnumString(AudioUploadKind, 24), nullable=False, index=True
+    )
     status: Mapped[AudioUploadStatus] = mapped_column(
-        String(24),
+        EnumString(AudioUploadStatus, 24),
         nullable=False,
         default=AudioUploadStatus.available,
         server_default=AudioUploadStatus.available.value,
@@ -67,7 +70,7 @@ class AudioUpload(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)
     format: Mapped[AudioSourceFormat] = mapped_column(
-        String(16),
+        EnumString(AudioSourceFormat, 16),
         nullable=False,
         default=AudioSourceFormat.wav,
         server_default=AudioSourceFormat.wav.value,
@@ -121,7 +124,9 @@ class AudioDerivative(Base):
         nullable=False,
         index=True,
     )
-    kind: Mapped[AudioDerivativeKind] = mapped_column(String(32), nullable=False, index=True)
+    kind: Mapped[AudioDerivativeKind] = mapped_column(
+        EnumString(AudioDerivativeKind, 32), nullable=False, index=True
+    )
     storage_key: Mapped[str] = mapped_column(Text, nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)

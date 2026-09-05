@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class IdeaIntakeStatus(StrEnum):
@@ -49,7 +50,7 @@ class IdeaIntake(Base):
     answers: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     questions: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False, default=list)
     status: Mapped[IdeaIntakeStatus] = mapped_column(
-        String(32),
+        EnumString(IdeaIntakeStatus, 32),
         nullable=False,
         default=IdeaIntakeStatus.needs_clarification,
         server_default=IdeaIntakeStatus.needs_clarification.value,
@@ -98,7 +99,7 @@ class SongSpecVersion(Base):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[SongSpecStatus] = mapped_column(
-        String(24),
+        EnumString(SongSpecStatus, 24),
         nullable=False,
         default=SongSpecStatus.draft,
         server_default=SongSpecStatus.draft.value,
@@ -166,7 +167,7 @@ class StructureChangePreview(Base):
     )
     impact: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     status: Mapped[StructureChangePreviewStatus] = mapped_column(
-        String(16),
+        EnumString(StructureChangePreviewStatus, 16),
         nullable=False,
         default=StructureChangePreviewStatus.pending,
         server_default=StructureChangePreviewStatus.pending.value,

@@ -6,6 +6,7 @@ from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from abachiwave.core.database import Base
+from abachiwave.core.types import EnumString
 
 
 class RevisionRequestStatus(StrEnum):
@@ -35,7 +36,7 @@ class RevisionRequest(Base):
     )
     feedback: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[RevisionRequestStatus] = mapped_column(
-        String(24),
+        EnumString(RevisionRequestStatus, 24),
         nullable=False,
         default=RevisionRequestStatus.planned,
         server_default=RevisionRequestStatus.planned.value,
